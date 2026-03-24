@@ -1,17 +1,44 @@
 # Google Drive Icon Guard
 
-Google Drive Icon Guard is a macOS utility project aimed at discovering every Google Drive-managed location on a Mac before attempting any narrow icon artefact protection.
+Google Drive Icon Guard is a macOS utility focused on discovering Google Drive-managed locations, surfacing hidden icon artefacts, and eventually helping users control that sync noise safely.
 
-The current repo state is intentionally scoped to **Milestone 1: scope discovery**. It does not include enforcement logic, Finder extension work, or a blind cleanup loop.
+This repository is currently in active development and should be treated as **beta**. The current codebase is still in the inventory and audit stage, not the final app release stage.
 
-## Current repo contents
+## What This App Aims To Be
 
-- [Project handover](./google-drive-icon-guard-handover.md)
-- workspace metadata in `.workspace/project.json`
-- a Swift Package scaffold for scope inventory probing
-- an initial support classifier aligned to the handover's `supported`, `auditOnly`, and `unsupported` model
+The intended final release is a downloadable macOS app, not just a source-only CLI.
 
-## Quick start
+The release target is a Mac app that can:
+
+- identify Google Drive-managed locations on the machine
+- show where icon-related hidden clutter is building up
+- measure the scope of that clutter so it becomes visible and actionable
+- classify which locations are safe for audit-only handling versus stronger protection
+- eventually provide narrow remediation or protection in supported scopes
+
+Early public releases should be considered beta builds while the discovery, classification, and safety model are proven out.
+
+## Why This App?
+
+On macOS, hidden files like `Icon\r` and `._*` can quietly multiply when folder icon metadata gets preserved across synced locations. What starts as harmless Finder metadata can turn into thousands of invisible files, wasted storage, and unnecessary sync noise.
+
+This app was built to tackle that problem. On my own Mac, those hidden artefacts grew to **40,000+ files using more than 6 GB** of space. The goal is simple: identify where Google Drive is managing files, surface the hidden icon clutter building up behind the scenes, and help make that invisible mess visible, measurable, and manageable.
+
+## Current Development Status
+
+The repo is currently centered on **Milestone 1: scope discovery**.
+
+Right now the codebase can:
+
+- probe common Google Drive macOS config roots
+- read DriveFS `root_preference_sqlite.db` for configured My Drive and backup roots
+- fall back to visible `~/Library/CloudStorage/GoogleDrive*` stream-style scopes when configured My Drive roots are unavailable
+- classify scopes by volume kind, filesystem kind, and support status
+- persist the latest scope snapshot to `cache/scope-inventory/latest.json`
+
+It does **not** yet ship the final SwiftUI app, privileged helper, or end-user remediation flow.
+
+## Quick Start
 
 ```bash
 swift build
@@ -19,20 +46,42 @@ swift run drive-icon-guard-scope-inventory
 swift test
 ```
 
-## What the current scaffold does
+## Testing
 
-- probes for common Google Drive macOS config roots
-- reads DriveFS `root_preference_sqlite.db` for configured My Drive and backup roots
-- falls back to visible `~/Library/CloudStorage/GoogleDrive*` stream-style scopes when configured My Drive roots are unavailable
-- classifies detected scopes by volume kind, filesystem kind, and support status
-- emits a JSON report and persists the latest snapshot to `cache/scope-inventory/latest.json`
+The test target in this repo is designed to run real assertions when a full Xcode toolchain is available.
 
-## What is still pending
+On machines using only Command Line Tools, `swift test` may degrade into a build-only pass because Apple does not expose the usual Swift test frameworks in that setup.
 
-- parsing deeper per-account Google Drive config/state beyond the root preference database
-- adding a SwiftUI control-plane app and privileged helper boundary
+To fix that locally:
 
-## Repo layout
+1. Install full Xcode.
+2. Point the active developer directory at Xcode:
+
+```bash
+sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
+```
+
+3. Verify the toolchain:
+
+```bash
+xcode-select -p
+swift --version
+swift test
+```
+
+For this public repo, a macOS GitHub Actions workflow is included so CI runs against a full Apple toolchain instead of Command Line Tools alone.
+
+## Project Docs
+
+- [Project handover](./google-drive-icon-guard-handover.md)
+- [Milestone 1 scope discovery notes](./docs/milestone-1-scope-inventory.md)
+- [Code of Conduct](./.github/CODE_OF_CONDUCT.md)
+- [Contributing](./.github/CONTRIBUTING.md)
+- [Security Policy](./.github/SECURITY.md)
+- [Support](./.github/SUPPORT.md)
+- [MIT License](./LICENSE)
+
+## Repo Layout
 
 ```text
 google-drive-icon-guard/
@@ -53,4 +102,4 @@ google-drive-icon-guard/
 └── Tests/
 ```
 
-The source scaffold stays aligned to the handover: inventory first, audit visibility next, enforcement later.
+The current implementation keeps the project honest: inventory first, audit visibility next, enforcement later.

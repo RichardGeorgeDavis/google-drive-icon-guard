@@ -1,0 +1,26 @@
+name: Swift Package CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  swift-package:
+    runs-on: macos-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Show active developer directory
+        run: xcode-select -p
+
+      - name: Show Swift version
+        run: swift --version
+
+      - name: Build package
+        run: swift build
+
+      - name: Run tests
+        run: swift test
