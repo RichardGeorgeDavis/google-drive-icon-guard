@@ -74,6 +74,8 @@ For this public repo, a macOS GitHub Actions workflow is included so CI runs aga
 ## Project Docs
 
 - [Project handover](./docs/google-drive-icon-guard-handover.md)
+- [Current progress handover](./docs/current-progress-handover.md)
+- [Changelog](./docs/CHANGELOG.md)
 - [Milestone 1 scope discovery notes](./docs/milestone-1-scope-inventory.md)
 - [Public launch checklist](./docs/public-launch-checklist.md)
 - [Code of Conduct](./.github/CODE_OF_CONDUCT.md)
