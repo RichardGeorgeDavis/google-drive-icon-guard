@@ -36,7 +36,7 @@ Right now the codebase can:
 - classify scopes by volume kind, filesystem kind, and support status
 - persist the latest scope snapshot to `cache/scope-inventory/latest.json`
 - keep timestamped history snapshots under `cache/scope-inventory/history/`
-- open a minimal SwiftUI viewer for discovered scopes via `swift run drive-icon-guard-viewer`
+- open a lightweight SwiftUI app shell for discovered scopes via `swift run drive-icon-guard-viewer`
 
 It does **not** yet ship the final full app shell, privileged helper, or end-user remediation flow.
 

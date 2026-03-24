@@ -5,7 +5,7 @@ This guide covers the **current beta/development state** of Google Drive Icon Gu
 Right now the repo provides:
 
 - a scope discovery CLI
-- a minimal SwiftUI scope inventory viewer
+- a lightweight SwiftUI app shell with an inventory view
 - persisted inventory snapshots under `cache/scope-inventory/latest.json`
 - timestamped history snapshots under `cache/scope-inventory/history/`
 

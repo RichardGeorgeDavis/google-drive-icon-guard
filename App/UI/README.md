@@ -9,7 +9,12 @@ Current target:
 Current role:
 
 - load the current scope inventory
-- persist a fresh snapshot on refresh
+- persist fresh snapshots on refresh
+- provide a lightweight app shell with:
+  - overview
+  - inventory
+  - logs placeholder
+  - settings placeholder
 - show scope mode, support status, paths, and warnings
 
-This is not yet the final app shell. It is the first visible app surface for the project.
+This is still not the final app shell, but it is now a clearer control-plane foundation for the beta app.
