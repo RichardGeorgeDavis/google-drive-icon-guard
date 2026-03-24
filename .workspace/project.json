@@ -1,0 +1,16 @@
+{
+  "name": "Google Drive Icon Guard",
+  "slug": "google-drive-icon-guard",
+  "type": "other",
+  "preferredMode": "direct",
+  "packageManager": "swiftpm",
+  "devCommand": "swift run drive-icon-guard-scope-inventory",
+  "buildCommand": "swift build",
+  "tags": [
+    "macos",
+    "swift",
+    "utility",
+    "google-drive"
+  ],
+  "notes": "Milestone 1 scaffold for discovering and classifying Google Drive-managed scopes before any enforcement work."
+}
