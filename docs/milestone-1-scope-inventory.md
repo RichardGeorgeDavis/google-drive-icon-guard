@@ -16,6 +16,7 @@ The current Swift scaffold intentionally implements only conservative discovery:
 
 - detect common Google Drive config roots on macOS
 - read configured roots from DriveFS `root_preference_sqlite.db`
+- confirm configured roots from per-account DriveFS `mirror_sqlite.db`
 - detect visible Stream/File Provider locations in `~/Library/CloudStorage` as a fallback
 - classify support status using the handover's rollout rules
 - persist the latest inventory snapshot to `cache/scope-inventory/latest.json`

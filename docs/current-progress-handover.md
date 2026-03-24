@@ -25,7 +25,9 @@ The current implementation can:
 
 - discover common DriveFS config locations on macOS
 - read DriveFS `root_preference_sqlite.db`
+- read per-account DriveFS `mirror_sqlite.db`
 - identify configured My Drive and backup roots from that database
+- confirm configured roots against per-account DriveFS root records
 - fall back to visible `~/Library/CloudStorage/GoogleDrive*` locations when needed
 - classify each discovered scope by:
   - drive mode

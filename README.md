@@ -1,5 +1,7 @@
 # Google Drive Icon Guard
 
+<img src="icon.png" alt="Google Drive Icon Guard icon" width="128" />
+
 Google Drive Icon Guard is a macOS utility focused on discovering Google Drive-managed locations, surfacing hidden icon artefacts, and eventually helping users control that sync noise safely.
 
 This repository is currently in active development and should be treated as **beta**. The current codebase is still in the inventory and audit stage, not the final app release stage.
@@ -32,6 +34,7 @@ Right now the codebase can:
 
 - probe common Google Drive macOS config roots
 - read DriveFS `root_preference_sqlite.db` for configured My Drive and backup roots
+- read per-account DriveFS `mirror_sqlite.db` data to confirm configured roots
 - fall back to visible `~/Library/CloudStorage/GoogleDrive*` stream-style scopes when configured My Drive roots are unavailable
 - classify scopes by volume kind, filesystem kind, and support status
 - persist the latest scope snapshot to `cache/scope-inventory/latest.json`

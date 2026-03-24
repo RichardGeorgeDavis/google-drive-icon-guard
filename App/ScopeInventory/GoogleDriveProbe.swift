@@ -3,18 +3,18 @@ import DriveIconGuardShared
 
 public struct GoogleDriveProbe {
     private let fileManager: FileManager
-    private let rootPreferenceStore: DriveFSRootPreferenceStore
+    private let driveFSRoot: String
     private let volumeClassifier: VolumeClassifier
     private let supportClassifier: ScopeSupportClassifier
 
     public init(
         fileManager: FileManager = .default,
-        rootPreferenceStore: DriveFSRootPreferenceStore = DriveFSRootPreferenceStore(),
+        driveFSRoot: String = NSString(string: "~/Library/Application Support/Google/DriveFS").expandingTildeInPath,
         volumeClassifier: VolumeClassifier = VolumeClassifier(),
         supportClassifier: ScopeSupportClassifier = ScopeSupportClassifier()
     ) {
         self.fileManager = fileManager
-        self.rootPreferenceStore = rootPreferenceStore
+        self.driveFSRoot = driveFSRoot
         self.volumeClassifier = volumeClassifier
         self.supportClassifier = supportClassifier
     }
@@ -64,7 +64,15 @@ public struct GoogleDriveProbe {
     }
 
     private func discoverConfigLocations() -> [String] {
+        let accountStore = DriveFSAccountStore(fileManager: fileManager, driveFSRoot: driveFSRoot)
+        let rootPreferenceStore = DriveFSRootPreferenceStore(
+            fileManager: fileManager,
+            driveFSRoot: driveFSRoot,
+            volumeClassifier: volumeClassifier,
+            supportClassifier: supportClassifier
+        )
         var locations = rootPreferenceStore.existingLocations()
+        locations.append(contentsOf: accountStore.accountDatabasePaths())
         let legacyDrivePath = NSString(string: "~/Library/Application Support/Google/Drive").expandingTildeInPath
 
         if fileManager.fileExists(atPath: legacyDrivePath) {
@@ -75,7 +83,14 @@ public struct GoogleDriveProbe {
     }
 
     private func discoverConfiguredScopes() -> (scopes: [DriveManagedScope], warnings: [DiscoveryWarning]) {
-        let databasePath = rootPreferenceStore.rootPreferenceDatabasePath()
+        let accountStore = DriveFSAccountStore(fileManager: fileManager, driveFSRoot: driveFSRoot)
+        let bareRootPreferenceStore = DriveFSRootPreferenceStore(
+            fileManager: fileManager,
+            driveFSRoot: driveFSRoot,
+            volumeClassifier: volumeClassifier,
+            supportClassifier: supportClassifier
+        )
+        let databasePath = bareRootPreferenceStore.rootPreferenceDatabasePath()
 
         guard fileManager.fileExists(atPath: databasePath) else {
             return (
@@ -90,6 +105,14 @@ public struct GoogleDriveProbe {
         }
 
         do {
+            let confirmedRootIDsByAccount = try accountStore.confirmedRootIDsByAccount()
+            let rootPreferenceStore = DriveFSRootPreferenceStore(
+                fileManager: fileManager,
+                driveFSRoot: driveFSRoot,
+                volumeClassifier: volumeClassifier,
+                supportClassifier: supportClassifier,
+                confirmedRootIDsByAccount: confirmedRootIDsByAccount
+            )
             let scopes = try rootPreferenceStore.discoverScopes()
             var warnings: [DiscoveryWarning] = []
 
@@ -98,6 +121,23 @@ public struct GoogleDriveProbe {
                     DiscoveryWarning(
                         code: "no_configured_roots_found",
                         message: "DriveFS root preferences were readable, but no active configured roots were found."
+                    )
+                )
+            }
+
+            let confirmedScopes = scopes.filter { $0.source == .confirmed }.count
+            if confirmedScopes > 0 {
+                warnings.append(
+                    DiscoveryWarning(
+                        code: "account_root_confirmation_active",
+                        message: "Per-account DriveFS mirror databases confirmed \(confirmedScopes) configured root(s) beyond root_preference_sqlite.db."
+                    )
+                )
+            } else {
+                warnings.append(
+                    DiscoveryWarning(
+                        code: "account_root_confirmation_unavailable",
+                        message: "Configured roots were loaded, but no per-account DriveFS root confirmations were available."
                     )
                 )
             }

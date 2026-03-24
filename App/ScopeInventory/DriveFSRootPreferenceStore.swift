@@ -64,17 +64,20 @@ public struct DriveFSRootPreferenceStore {
     private let driveFSRoot: String
     private let volumeClassifier: VolumeClassifier
     private let supportClassifier: ScopeSupportClassifier
+    private let confirmedRootIDsByAccount: [String: Set<Int64>]
 
     public init(
         fileManager: FileManager = .default,
         driveFSRoot: String = NSString(string: "~/Library/Application Support/Google/DriveFS").expandingTildeInPath,
         volumeClassifier: VolumeClassifier = VolumeClassifier(),
-        supportClassifier: ScopeSupportClassifier = ScopeSupportClassifier()
+        supportClassifier: ScopeSupportClassifier = ScopeSupportClassifier(),
+        confirmedRootIDsByAccount: [String: Set<Int64>] = [:]
     ) {
         self.fileManager = fileManager
         self.driveFSRoot = driveFSRoot
         self.volumeClassifier = volumeClassifier
         self.supportClassifier = supportClassifier
+        self.confirmedRootIDsByAccount = confirmedRootIDsByAccount
     }
 
     public func existingLocations() -> [String] {
@@ -110,6 +113,10 @@ public struct DriveFSRootPreferenceStore {
 
     public func discoverScopes() throws -> [DriveManagedScope] {
         try loadRecords().compactMap(scope(from:))
+    }
+
+    public func discoverScopes(from records: [DriveFSRootPreferenceRecord]) -> [DriveManagedScope] {
+        records.compactMap(scope(from:))
     }
 
     private func accountDirectories() -> [String] {
@@ -148,7 +155,7 @@ public struct DriveFSRootPreferenceStore {
             path: resolvedPath,
             scopeKind: scopeKind,
             driveMode: driveMode,
-            source: .config,
+            source: isConfirmed(record) ? .confirmed : .config,
             volumeKind: volume.volumeKind,
             fileSystemKind: volume.fileSystemKind,
             supportStatus: .auditOnly
@@ -180,6 +187,14 @@ public struct DriveFSRootPreferenceStore {
         }
 
         return .backup
+    }
+
+    private func isConfirmed(_ record: DriveFSRootPreferenceRecord) -> Bool {
+        guard let confirmedRootIDs = confirmedRootIDsByAccount[record.accountToken] else {
+            return false
+        }
+
+        return confirmedRootIDs.contains(record.rootID)
     }
 
     private func scopeKind(
