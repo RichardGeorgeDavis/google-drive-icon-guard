@@ -73,7 +73,7 @@ For this public repo, a macOS GitHub Actions workflow is included so CI runs aga
 
 ## Project Docs
 
-- [Project handover](./google-drive-icon-guard-handover.md)
+- [Project handover](./docs/google-drive-icon-guard-handover.md)
 - [Milestone 1 scope discovery notes](./docs/milestone-1-scope-inventory.md)
 - [Code of Conduct](./.github/CODE_OF_CONDUCT.md)
 - [Contributing](./.github/CONTRIBUTING.md)
