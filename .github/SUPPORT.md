@@ -6,7 +6,8 @@ Start with:
 
 1. [README.md](../README.md)
 2. [docs/milestone-1-scope-inventory.md](../docs/milestone-1-scope-inventory.md)
-3. existing issues and discussions, if available
+3. [docs/first-run-and-troubleshooting.md](../docs/first-run-and-troubleshooting.md)
+4. existing issues and discussions, if available
 
 ## Where to open issues
 

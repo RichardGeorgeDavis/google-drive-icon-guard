@@ -79,6 +79,7 @@ This machine is now using full Xcode successfully, and the repo also includes a 
 - [Current progress handover](./docs/current-progress-handover.md)
 - [Changelog](./docs/CHANGELOG.md)
 - [Milestone 1 scope discovery notes](./docs/milestone-1-scope-inventory.md)
+- [First-run guidance and troubleshooting](./docs/first-run-and-troubleshooting.md)
 - [Public launch checklist](./docs/public-launch-checklist.md)
 - [Code of Conduct](./.github/CODE_OF_CONDUCT.md)
 - [Contributing](./.github/CONTRIBUTING.md)
