@@ -27,6 +27,7 @@
 - fallback discovery of visible `~/Library/CloudStorage/GoogleDrive*` stream roots
 - scope classification by mode, scope kind, volume kind, filesystem kind, and support status
 - persisted inventory snapshots written to `cache/scope-inventory/latest.json`
+- persisted inventory history written to `cache/scope-inventory/history/`
 
 ### Documentation
 

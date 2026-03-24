@@ -22,10 +22,10 @@ final class ScopeInventoryViewModel: ObservableObject {
         Task {
             do {
                 let nextReport = service.generateReport()
-                let persistedURL = try service.persistReport(nextReport)
+                let persistenceResult = try service.persistReport(nextReport)
 
                 report = nextReport
-                persistedPath = persistedURL.path
+                persistedPath = persistenceResult.latestURL.path
                 isLoading = false
             } catch {
                 errorMessage = error.localizedDescription

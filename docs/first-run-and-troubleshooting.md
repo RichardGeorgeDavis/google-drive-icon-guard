@@ -7,6 +7,7 @@ Right now the repo provides:
 - a scope discovery CLI
 - a minimal SwiftUI scope inventory viewer
 - persisted inventory snapshots under `cache/scope-inventory/latest.json`
+- timestamped history snapshots under `cache/scope-inventory/history/`
 
 It does **not** yet install a privileged helper or ship the final downloadable app flow.
 
@@ -55,6 +56,7 @@ swift test
 
 - the CLI should print a JSON inventory report
 - the CLI should persist the latest snapshot to `cache/scope-inventory/latest.json`
+- the CLI should also write a timestamped history snapshot under `cache/scope-inventory/history/`
 - the viewer should load discovered scopes, warnings, and the persisted path
 - the current implementation should discover configured DriveFS roots when available
 
@@ -131,6 +133,12 @@ The latest snapshot is written atomically to:
 
 ```text
 cache/scope-inventory/latest.json
+```
+
+History snapshots are written to:
+
+```text
+cache/scope-inventory/history/
 ```
 
 ### Discovery output includes machine-specific absolute paths

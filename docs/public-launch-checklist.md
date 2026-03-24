@@ -50,6 +50,6 @@ Use this checklist before making `google-drive-icon-guard` public or announcing 
 
 - Parse deeper DriveFS account settings beyond root preferences
 - Add a SwiftUI scope inventory viewer
-- Add persisted inventory history instead of latest-only snapshots
 - Add beta release packaging for the downloadable macOS app
 - Add first-run guidance and permission troubleshooting
+- Add viewer screenshots for the public beta README

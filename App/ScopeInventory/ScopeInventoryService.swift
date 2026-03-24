@@ -20,7 +20,7 @@ public struct ScopeInventoryService {
     public func persistReport(
         _ report: ScopeInventoryReport,
         projectRoot: String = FileManager.default.currentDirectoryPath
-    ) throws -> URL {
+    ) throws -> ScopeInventoryPersistenceResult {
         try persistence.persist(report, projectRoot: projectRoot)
     }
 }

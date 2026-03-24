@@ -19,6 +19,7 @@ The current Swift scaffold intentionally implements only conservative discovery:
 - detect visible Stream/File Provider locations in `~/Library/CloudStorage` as a fallback
 - classify support status using the handover's rollout rules
 - persist the latest inventory snapshot to `cache/scope-inventory/latest.json`
+- persist timestamped inventory history under `cache/scope-inventory/history/`
 - expose a minimal SwiftUI viewer for the discovered inventory
 
 It now covers mirror and backup roots when they are present in DriveFS root preferences, but it does **not** yet parse deeper per-account settings blobs.
