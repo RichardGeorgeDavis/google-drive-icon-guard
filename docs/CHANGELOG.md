@@ -22,6 +22,7 @@
 - Swift Package scaffold for the scope inventory work
 - shared data models for scopes, process signatures, artefact rules, and events
 - scope discovery CLI: `swift run drive-icon-guard-scope-inventory`
+- minimal SwiftUI viewer: `swift run drive-icon-guard-viewer`
 - DriveFS root preference parsing from `root_preference_sqlite.db`
 - fallback discovery of visible `~/Library/CloudStorage/GoogleDrive*` stream roots
 - scope classification by mode, scope kind, volume kind, filesystem kind, and support status
@@ -32,6 +33,7 @@
 - moved the original product handover into `docs/`
 - added Milestone 1 notes describing the current implementation boundary
 - clarified the testing caveat around full Xcode versus Command Line Tools
+- updated docs to reflect that full Xcode testing now works on the maintainer machine
 - aligned docs around public beta positioning
 
 ### Cleanup

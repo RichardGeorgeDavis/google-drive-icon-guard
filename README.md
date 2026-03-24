@@ -35,22 +35,24 @@ Right now the codebase can:
 - fall back to visible `~/Library/CloudStorage/GoogleDrive*` stream-style scopes when configured My Drive roots are unavailable
 - classify scopes by volume kind, filesystem kind, and support status
 - persist the latest scope snapshot to `cache/scope-inventory/latest.json`
+- open a minimal SwiftUI viewer for discovered scopes via `swift run drive-icon-guard-viewer`
 
-It does **not** yet ship the final SwiftUI app, privileged helper, or end-user remediation flow.
+It does **not** yet ship the final full app shell, privileged helper, or end-user remediation flow.
 
 ## Quick Start
 
 ```bash
 swift build
 swift run drive-icon-guard-scope-inventory
+swift run drive-icon-guard-viewer
 swift test
 ```
 
 ## Testing
 
-The test target in this repo is designed to run real assertions when a full Xcode toolchain is available.
+The test target in this repo runs real assertions when a full Xcode toolchain is available.
 
-On machines using only Command Line Tools, `swift test` may degrade into a build-only pass because Apple does not expose the usual Swift test frameworks in that setup.
+If a contributor is using only Apple Command Line Tools, `swift test` may degrade into a build-only pass because Apple does not expose the usual Swift test frameworks in that setup.
 
 To fix that locally:
 
@@ -69,7 +71,7 @@ swift --version
 swift test
 ```
 
-For this public repo, a macOS GitHub Actions workflow is included so CI runs against a full Apple toolchain instead of Command Line Tools alone.
+This machine is now using full Xcode successfully, and the repo also includes a macOS GitHub Actions workflow so CI runs against a full Apple toolchain instead of Command Line Tools alone.
 
 ## Project Docs
 

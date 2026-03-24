@@ -10,6 +10,7 @@ The repo is now a standalone Git repository with:
 - repo policies for contribution, conduct, support, security, and licensing
 - a Swift Package scaffold for scope inventory work
 - a working CLI for Google Drive scope discovery
+- a minimal SwiftUI viewer for discovered scopes
 - persisted inventory snapshots written to `cache/scope-inventory/latest.json`
 - GitHub issue templates and a public launch checklist
 
@@ -55,7 +56,7 @@ This output is ignored by Git and intended as repo-local generated state.
 
 ## What is not implemented yet
 
-- the final SwiftUI app
+- the final full SwiftUI app shell
 - the privileged helper/service boundary
 - enforcement or remediation behavior
 - deeper parsing of per-account DriveFS settings beyond root preferences
@@ -66,12 +67,12 @@ This output is ignored by Git and intended as repo-local generated state.
 
 The repo includes a Swift test target and a macOS GitHub Actions workflow.
 
-Local testing can be misleading if the machine uses only Apple Command Line Tools. For reliable local Swift test behavior, use full Xcode and point `xcode-select` at it.
+Local testing can be misleading on machines that use only Apple Command Line Tools. For reliable local Swift test behavior, use full Xcode and point `xcode-select` at it.
 
 ## Recommended next steps
 
 1. Parse deeper DriveFS account settings beyond root preferences.
-2. Add a SwiftUI inventory viewer for discovered scopes.
+2. Expand the SwiftUI inventory viewer into a fuller control-plane app shell.
 3. Persist inventory history instead of only `latest.json`.
 4. Add release packaging for a downloadable macOS beta.
 5. Keep the original handover aligned with implementation milestones as the repo evolves.

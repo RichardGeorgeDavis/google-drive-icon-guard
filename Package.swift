@@ -19,6 +19,10 @@ let package = Package(
         .executable(
             name: "drive-icon-guard-scope-inventory",
             targets: ["DriveIconGuardScopeInventoryCLI"]
+        ),
+        .executable(
+            name: "drive-icon-guard-viewer",
+            targets: ["DriveIconGuardViewer"]
         )
     ],
     targets: [
@@ -42,6 +46,15 @@ let package = Package(
                 "DriveIconGuardScopeInventory"
             ],
             path: "Tools/ScopeInventoryCLI"
+        ),
+        .executableTarget(
+            name: "DriveIconGuardViewer",
+            dependencies: [
+                "DriveIconGuardShared",
+                "DriveIconGuardScopeInventory"
+            ],
+            path: "App/UI",
+            exclude: ["README.md"]
         ),
         .testTarget(
             name: "DriveIconGuardScopeInventoryTests",
