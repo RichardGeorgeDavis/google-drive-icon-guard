@@ -25,6 +25,7 @@
 - minimal SwiftUI viewer: `swift run drive-icon-guard-viewer`
 - expanded SwiftUI app shell with overview, inventory, logs placeholder, and settings placeholder
 - DriveFS root preference parsing from `root_preference_sqlite.db`
+- beta packaging script for an unsigned downloadable `.app`
 - fallback discovery of visible `~/Library/CloudStorage/GoogleDrive*` stream roots
 - scope classification by mode, scope kind, volume kind, filesystem kind, and support status
 - persisted inventory snapshots written to `cache/scope-inventory/latest.json`

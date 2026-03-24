@@ -20,6 +20,26 @@ The release target is a Mac app that can:
 
 Early public releases should be considered beta builds while the discovery, classification, and safety model are proven out.
 
+## Beta Release Format
+
+The repo now includes a practical beta packaging path for a downloadable macOS app.
+
+Current beta packaging:
+
+- unsigned `.app` bundle
+- zipped beta archive for download
+- built from the current SwiftUI app shell
+
+Build it locally with:
+
+```bash
+./tools/release/build-beta-app.sh
+```
+
+See:
+
+- [Beta release packaging](./docs/beta-release-packaging.md)
+
 ## Why This App?
 
 On macOS, hidden files like `Icon\r` and `._*` can quietly multiply when folder icon metadata gets preserved across synced locations. What starts as harmless Finder metadata can turn into thousands of invisible files, wasted storage, and unnecessary sync noise.
@@ -82,6 +102,7 @@ This machine is now using full Xcode successfully, and the repo also includes a 
 - [Project handover](./docs/google-drive-icon-guard-handover.md)
 - [Current progress handover](./docs/current-progress-handover.md)
 - [Changelog](./docs/CHANGELOG.md)
+- [Beta release packaging](./docs/beta-release-packaging.md)
 - [Milestone 1 scope discovery notes](./docs/milestone-1-scope-inventory.md)
 - [First-run guidance and troubleshooting](./docs/first-run-and-troubleshooting.md)
 - [Public launch checklist](./docs/public-launch-checklist.md)

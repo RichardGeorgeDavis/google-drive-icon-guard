@@ -23,6 +23,7 @@ Use this checklist before making `google-drive-icon-guard` public or announcing 
 - document minimum macOS version for the beta
 - document whether the beta is unsigned, signed, or notarized
 - add basic install and first-run instructions for the beta app
+- test the beta packaging script before announcing the release
 
 ## Documentation polish
 

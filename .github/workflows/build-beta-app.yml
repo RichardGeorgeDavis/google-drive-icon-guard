@@ -1,0 +1,24 @@
+name: Build Beta App
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build-beta-app:
+    runs-on: macos-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Show active developer directory
+        run: xcode-select -p
+
+      - name: Build beta app bundle
+        run: ./tools/release/build-beta-app.sh
+
+      - name: Upload beta app archive
+        uses: actions/upload-artifact@v4
+        with:
+          name: google-drive-icon-guard-beta-unsigned
+          path: dist/google-drive-icon-guard-beta-unsigned.zip

@@ -13,6 +13,7 @@ The repo is now a standalone Git repository with:
 - a lightweight SwiftUI app shell for discovered scopes
 - persisted inventory snapshots written to `cache/scope-inventory/latest.json`
 - persisted inventory history written to `cache/scope-inventory/history/`
+- a beta packaging script for an unsigned downloadable `.app`
 - GitHub issue templates and a public launch checklist
 
 The project is still in **beta / active development**. It is not yet the final downloadable app release.
@@ -69,7 +70,7 @@ These outputs are ignored by Git and intended as repo-local generated state.
 - the privileged helper/service boundary
 - enforcement or remediation behavior
 - deeper parsing of per-account DriveFS settings beyond root preferences
-- app packaging for a downloadable beta release
+- signed and notarized beta release packaging
 
 ## Testing and toolchain note
 
@@ -80,7 +81,7 @@ Local testing can be misleading on machines that use only Apple Command Line Too
 ## Recommended next steps
 
 1. Parse deeper DriveFS account settings beyond root preferences.
-2. Add release packaging for a downloadable macOS beta.
+2. Decide when to sign and notarize public beta builds.
 3. Keep the original handover aligned with implementation milestones as the repo evolves.
 
 ## Key docs

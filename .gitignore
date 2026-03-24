@@ -3,6 +3,7 @@
 .swiftpm/
 DerivedData/
 cache/
+dist/
 .workspace/project.local.json
 icon-options/
 icon options/
