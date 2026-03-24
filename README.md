@@ -30,7 +30,6 @@ swift test
 ## What is still pending
 
 - parsing deeper per-account Google Drive config/state beyond the root preference database
-- persisting the discovered scope inventory
 - adding a SwiftUI control-plane app and privileged helper boundary
 
 ## Repo layout

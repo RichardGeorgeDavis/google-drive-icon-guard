@@ -27,8 +27,8 @@ It now covers mirror and backup roots when they are present in DriveFS root pref
 1. Parse deeper Google Drive state under `~/Library/Application Support/Google/DriveFS` and related roots.
 2. Resolve any account-specific settings not represented in root preferences.
 3. Confirm custom backup scopes and one-shot states from config/state beyond the root database.
-4. Persist the discovered inventory for later UI and helper consumption.
-5. Add a simple SwiftUI or CLI presentation layer for operator review.
+4. Feed the persisted inventory into later UI and helper consumption paths.
+5. Add a simple SwiftUI or richer CLI presentation layer for operator review.
 
 ## Acceptance mapping
 
