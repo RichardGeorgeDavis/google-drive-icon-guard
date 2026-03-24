@@ -9,6 +9,7 @@ The current beta packaging target is:
 - an **unsigned** `.app` bundle
 - zipped as a downloadable archive
 - built from the `drive-icon-guard-viewer` SwiftUI target
+- app-only; no helper or installer is included in the current beta package
 
 This is a practical first beta format, not the final release/distribution model.
 
@@ -36,6 +37,12 @@ What it does:
 - writes an `Info.plist`
 - copies `icon.png` into the bundle resources
 - creates a zip archive for distribution
+
+What it does **not** do yet:
+
+- package a privileged helper
+- register any installer or service component
+- ship the final app + helper architecture described in the handover
 
 ## First beta install expectations
 

@@ -23,13 +23,13 @@ The current Swift scaffold intentionally implements only conservative discovery:
 - persist timestamped inventory history under `cache/scope-inventory/history/`
 - expose a minimal SwiftUI viewer for the discovered inventory
 
-It now covers mirror and backup roots when they are present in DriveFS root preferences, but it does **not** yet parse deeper per-account settings blobs.
+It now covers mirror and backup roots when they are present in DriveFS root preferences and can confirm configured roots from per-account DriveFS account data. It does **not** yet parse broader non-root account state beyond those current confirmation paths.
 
 ## Next implementation steps
 
 1. Parse deeper Google Drive state under `~/Library/Application Support/Google/DriveFS` and related roots.
-2. Resolve any account-specific settings not represented in root preferences.
-3. Confirm custom backup scopes and one-shot states from config/state beyond the root database.
+2. Resolve any remaining account-specific settings not represented in the current root confirmation paths.
+3. Confirm custom backup scopes and one-shot states from config/state beyond the current root databases.
 4. Feed the persisted inventory into later UI and helper consumption paths.
 5. Expand the current SwiftUI viewer into a richer operator-facing presentation layer.
 

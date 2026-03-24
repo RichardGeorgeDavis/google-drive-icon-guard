@@ -1,5 +1,9 @@
 # Handover: macOS utility to prevent Google Drive folder icon artefacts
 
+This is the original product and architecture handover.
+
+For the current implemented repo state, use [current-progress-handover.md](./current-progress-handover.md).
+
 ## Project summary
 
 Build a macOS product that identifies **all Google Drive-managed locations** on a Mac and applies **narrow, process-aware icon artefact prevention** only where it is safe and supported.

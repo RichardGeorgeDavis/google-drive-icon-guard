@@ -2,7 +2,9 @@
 
 <img src="icon.png" alt="Google Drive Icon Guard icon" width="128" />
 
-Google Drive Icon Guard is a macOS utility focused on discovering Google Drive-managed locations, surfacing hidden icon artefacts, and eventually helping users control that sync noise safely.
+Google Drive Icon Guard is a macOS utility aimed at stopping Google Drive from generating invisible icon files across synced locations.
+
+The current beta does that indirectly for now: it discovers Google Drive-managed locations, surfaces hidden icon artefacts, and builds the safety model needed before stronger prevention or cleanup is introduced.
 
 This repository is currently in active development and should be treated as **beta**. The current codebase is still in the inventory and audit stage, not the final app release stage.
 
@@ -13,12 +15,24 @@ The intended final release is a downloadable macOS app, not just a source-only C
 The release target is a Mac app that can:
 
 - identify Google Drive-managed locations on the machine
-- show where icon-related hidden clutter is building up
+- show where Google Drive-generated invisible icon files and related hidden clutter are building up
 - measure the scope of that clutter so it becomes visible and actionable
 - classify which locations are safe for audit-only handling versus stronger protection
-- eventually provide narrow remediation or protection in supported scopes
+- eventually stop Google Drive from generating or persisting those invisible icon files in supported scopes
 
 Early public releases should be considered beta builds while the discovery, classification, and safety model are proven out.
+
+## Planned Architecture
+
+The intended final product is not just a viewer app.
+
+Planned components:
+
+- a macOS app for inventory, review, settings, and user-facing workflow
+- a helper/service boundary for later narrow, process-aware protection work
+- installer/setup flow for registering that helper only when the project reaches that stage
+
+The current public beta does **not** ship the helper or installer. Current releases are app-only while discovery, classification, and audit workflows are still being validated.
 
 ## Beta Release Format
 
@@ -29,6 +43,7 @@ Current beta packaging:
 - unsigned `.app` bundle
 - zipped beta archive for download
 - built from the current SwiftUI app shell
+- app-only until helper implementation and installation flow exist
 
 Build it locally with:
 
@@ -44,7 +59,7 @@ See:
 
 On macOS, hidden files like `Icon\r` and `._*` can quietly multiply when folder icon metadata gets preserved across synced locations. What starts as harmless Finder metadata can turn into thousands of invisible files, wasted storage, and unnecessary sync noise.
 
-This app was built to tackle that problem. On my own Mac, those hidden artefacts grew to **40,000+ files using more than 6 GB** of space. The goal is simple: identify where Google Drive is managing files, surface the hidden icon clutter building up behind the scenes, and help make that invisible mess visible, measurable, and manageable.
+This app was built to tackle that problem. On my own Mac, those hidden artefacts grew to **40,000+ files using more than 6 GB** of space. The goal is simple: identify where Google Drive is managing files, surface the hidden icon clutter building up behind the scenes, and ultimately stop Google Drive from repeatedly generating that invisible mess in places where it is safe to do so.
 
 ## Current Development Status
 

@@ -8,8 +8,9 @@ Right now the repo provides:
 - a lightweight SwiftUI app shell with an inventory view
 - persisted inventory snapshots under `cache/scope-inventory/latest.json`
 - timestamped history snapshots under `cache/scope-inventory/history/`
+- an app-only beta packaging script for local `.app` and zip creation
 
-It does **not** yet install a privileged helper or ship the final downloadable app flow.
+It does **not** yet install a privileged helper or ship the final helper-backed downloadable app flow.
 
 ## First run
 
