@@ -15,6 +15,8 @@ The repo is now a standalone Git repository with:
 - persisted inventory history written to `cache/scope-inventory/history/`
 - an app-only beta packaging script for an unsigned downloadable `.app`
 - a manual GitHub Actions workflow for building the beta app archive
+- a verified GitHub Actions beta packaging run on `main`
+- a saved GitHub Release draft for `v0.1.0-beta.1`
 - GitHub issue templates and a public launch checklist
 
 The project is still in **beta / active development**. It is not yet the final downloadable app release.

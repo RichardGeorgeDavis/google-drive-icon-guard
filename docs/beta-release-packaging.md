@@ -63,3 +63,7 @@ Because the app is currently unsigned and not notarized:
 ## GitHub workflow
 
 The repo also includes a manual GitHub Actions workflow for building the beta app artifact in CI.
+
+That workflow has now been run successfully on `main`, confirming that CI can produce the current unsigned beta archive.
+
+The first GitHub Release draft for `v0.1.0-beta.1` also exists, although attaching the built zip is still a manual release-management step.
