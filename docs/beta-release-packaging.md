@@ -27,7 +27,7 @@ This is a practical first beta format, not the final release/distribution model.
 Use:
 
 ```bash
-./tools/release/build-beta-app.sh
+./Tools/release/build-beta-app.sh
 ```
 
 What it does:

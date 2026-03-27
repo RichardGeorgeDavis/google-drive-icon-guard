@@ -1,5 +1,17 @@
 # Changelog
 
+## 2026-03-27
+
+### Implemented
+
+- audit-only hidden artefact scanning across supported and audit-only scopes
+- per-scope artefact summaries with match counts, storage impact, and sample paths
+- viewer updates to surface scan status and artefact impact alongside discovered scopes
+
+### Testing
+
+- added scanner coverage for hidden artefact detection, unsupported-scope skips, and missing-scope warnings
+
 ## 2026-03-24
 
 ### Added

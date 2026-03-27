@@ -49,8 +49,8 @@ Use this checklist before making `google-drive-icon-guard` public or announcing 
 
 ## Suggested first public issues
 
-- Add hidden artefact scanning in audit-only mode
-- Show per-scope artefact counts and storage impact
-- Show scope details and confidence in the viewer
+- Improve the viewer presentation for per-scope artefact counts, bytes, and scan status
 - Add historical snapshot browser and comparison view
+- Show scope details and confidence in the viewer
 - Add viewer screenshots for the public beta README
+- Decide and document beta signing/notarization timing

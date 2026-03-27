@@ -3,17 +3,25 @@ import Foundation
 public struct ScopeInventoryService {
     private let probe: GoogleDriveProbe
     private let persistence: ScopeInventoryPersistence
+    private let artefactScanner: ArtefactScanner
 
     public init(
         probe: GoogleDriveProbe = GoogleDriveProbe(),
-        persistence: ScopeInventoryPersistence = ScopeInventoryPersistence()
+        persistence: ScopeInventoryPersistence = ScopeInventoryPersistence(),
+        artefactScanner: ArtefactScanner = ArtefactScanner()
     ) {
         self.probe = probe
         self.persistence = persistence
+        self.artefactScanner = artefactScanner
     }
 
     public func generateReport() -> ScopeInventoryReport {
-        probe.discover()
+        var report = probe.discover()
+        report.artefactInventory = artefactScanner.scan(
+            scopes: report.scopes,
+            generatedAt: report.generatedAt
+        )
+        return report
     }
 
     @discardableResult

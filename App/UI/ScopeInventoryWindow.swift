@@ -111,6 +111,7 @@ struct ScopeInventoryWindow: View {
                         lines: [
                             "DriveFS root preference discovery",
                             "Scope classification and support status",
+                            "Audit-only hidden artefact scanning",
                             "Latest plus historical inventory persistence",
                             "Minimal SwiftUI viewer for review"
                         ]
@@ -208,12 +209,14 @@ struct ScopeInventoryWindow: View {
     private var stats: some View {
         let report = viewModel.report
         let scopes = report?.scopes ?? []
+        let artefactInventory = report?.artefactInventory
 
         return HStack(spacing: 12) {
             statCard(title: "Scopes", value: "\(scopes.count)")
             statCard(title: "Supported", value: "\(scopes.filter { $0.supportStatus == .supported }.count)")
             statCard(title: "Audit Only", value: "\(scopes.filter { $0.supportStatus == .auditOnly }.count)")
-            statCard(title: "Warnings", value: "\(report?.warnings.count ?? 0)")
+            statCard(title: "Artefacts", value: "\(artefactInventory?.totalArtefactCount ?? 0)")
+            statCard(title: "Impact", value: formattedByteCount(artefactInventory?.totalBytes ?? 0))
         }
     }
 
@@ -257,6 +260,37 @@ struct ScopeInventoryWindow: View {
                             }
                             .font(.caption)
                             .foregroundStyle(.secondary)
+
+                            if let scanResult = artefactScanResult(for: scope) {
+                                Divider()
+
+                                HStack(spacing: 10) {
+                                    badge(scanStatusLabel(scanResult.scanStatus), tint: scanStatusColor(scanResult.scanStatus))
+                                    metadataLabel("Matches", value: "\(scanResult.matchedArtefactCount)")
+                                    metadataLabel("Bytes", value: formattedByteCount(scanResult.matchedBytes))
+                                }
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+
+                                if !scanResult.sampleMatches.isEmpty {
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        Text("Sample matches")
+                                            .font(.caption.weight(.semibold))
+
+                                        ForEach(scanResult.sampleMatches) { sample in
+                                            HStack(alignment: .top, spacing: 8) {
+                                                Text(sample.relativePath)
+                                                    .font(.system(.caption, design: .monospaced))
+                                                    .textSelection(.enabled)
+                                                Spacer(minLength: 12)
+                                                Text(sample.ruleName)
+                                                    .font(.caption)
+                                                    .foregroundStyle(.secondary)
+                                            }
+                                        }
+                                    }
+                                }
+                            }
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(14)
@@ -278,13 +312,16 @@ struct ScopeInventoryWindow: View {
     }
 
     private var warningsSection: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        let warnings = combinedWarnings
+
+        return VStack(alignment: .leading, spacing: 10) {
             Text("Warnings")
                 .font(.headline)
 
-            if let report = viewModel.report, !report.warnings.isEmpty {
+            if !warnings.isEmpty {
                 VStack(alignment: .leading, spacing: 10) {
-                    ForEach(report.warnings, id: \.code) { warning in
+                    ForEach(Array(warnings.enumerated()), id: \.offset) { entry in
+                        let warning = entry.element
                         VStack(alignment: .leading, spacing: 4) {
                             Text(warning.code)
                                 .font(.subheadline.weight(.semibold))
@@ -400,5 +437,47 @@ struct ScopeInventoryWindow: View {
         case .backup:
             return .teal
         }
+    }
+
+    private var combinedWarnings: [DiscoveryWarning] {
+        guard let report = viewModel.report else {
+            return []
+        }
+
+        return report.warnings + report.artefactInventory.warnings
+    }
+
+    private func artefactScanResult(for scope: DriveManagedScope) -> ScopeArtefactScanResult? {
+        viewModel.report?.artefactInventory.scopeResults.first(where: { $0.scopeID == scope.id })
+    }
+
+    private func scanStatusLabel(_ status: ScopeArtefactScanStatus) -> String {
+        switch status {
+        case .scanned:
+            return "scanned"
+        case .skippedUnsupported:
+            return "skipped"
+        case .missingPath:
+            return "missing"
+        case .unreadable:
+            return "unreadable"
+        }
+    }
+
+    private func scanStatusColor(_ status: ScopeArtefactScanStatus) -> Color {
+        switch status {
+        case .scanned:
+            return .blue
+        case .skippedUnsupported:
+            return .secondary
+        case .missingPath:
+            return .orange
+        case .unreadable:
+            return .red
+        }
+    }
+
+    private func formattedByteCount(_ bytes: Int) -> String {
+        ByteCountFormatter.string(fromByteCount: Int64(bytes), countStyle: .file)
     }
 }

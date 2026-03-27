@@ -33,6 +33,8 @@ The current implementation can:
 - identify configured My Drive and backup roots from that database
 - confirm configured roots against per-account DriveFS root records
 - fall back to visible `~/Library/CloudStorage/GoogleDrive*` locations when needed
+- scan supported and audit-only scopes for `Icon\r` and `._*` hidden artefacts
+- capture per-scope artefact counts, sample paths, and total storage impact
 - classify each discovered scope by:
   - drive mode
   - scope kind
@@ -83,7 +85,7 @@ Local testing can be misleading on machines that use only Apple Command Line Too
 
 ## Recommended next steps
 
-1. Add audit-only hidden artefact scanning on top of the current scope inventory.
+1. Surface per-scope artefact counts and storage impact more prominently in the viewer.
 2. Decide when to sign and notarize public beta builds.
 3. Keep the original handover aligned with implementation milestones as the repo evolves.
 
