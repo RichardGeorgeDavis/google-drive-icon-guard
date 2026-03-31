@@ -1,10 +1,11 @@
 import DriveIconGuardScopeInventory
 import DriveIconGuardShared
+import AppKit
 import SwiftUI
 
 private enum AppSection: String, CaseIterable, Identifiable {
-    case overview
-    case inventory
+    case dashboard
+    case history
     case logs
     case settings
 
@@ -12,10 +13,10 @@ private enum AppSection: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .overview:
-            return "Overview"
-        case .inventory:
-            return "Inventory"
+        case .dashboard:
+            return "Dashboard"
+        case .history:
+            return "History"
         case .logs:
             return "Logs"
         case .settings:
@@ -25,10 +26,10 @@ private enum AppSection: String, CaseIterable, Identifiable {
 
     var systemImage: String {
         switch self {
-        case .overview:
-            return "rectangle.3.group.bubble.left"
-        case .inventory:
+        case .dashboard:
             return "externaldrive.connected.to.line.below"
+        case .history:
+            return "clock.arrow.trianglehead.counterclockwise.rotate.90"
         case .logs:
             return "text.justify.left"
         case .settings:
@@ -37,9 +38,25 @@ private enum AppSection: String, CaseIterable, Identifiable {
     }
 }
 
+private struct ActivityItem: Identifiable {
+    let id: String
+    let title: String
+    let detail: String
+    let systemImage: String
+    let tint: Color
+    let timestamp: Date?
+}
+
 struct ScopeInventoryWindow: View {
+    @AppStorage("scopeInventory.historyLimit") private var historyLimit = 6
+    @AppStorage("scopeInventory.showSampleMatches") private var showSampleMatches = true
+    @AppStorage("scopeInventory.showWarningsInLogs") private var showWarningsInLogs = true
+    @AppStorage("scopeInventory.liveProtectionEnabled") private var liveProtectionEnabled = true
+
     @StateObject private var viewModel = ScopeInventoryViewModel()
-    @State private var selection: AppSection? = .overview
+    @State private var selection: AppSection? = .dashboard
+    @State private var selectedScopeID: UUID?
+    @State private var exportMessage: String?
 
     var body: some View {
         NavigationSplitView {
@@ -62,11 +79,30 @@ struct ScopeInventoryWindow: View {
                 }
                 .disabled(viewModel.isLoading)
             }
+
+            ToolbarItem {
+                Button {
+                    exportFindings()
+                } label: {
+                    Label("Export Findings", systemImage: "square.and.arrow.up")
+                }
+                .disabled(viewModel.report == nil)
+            }
         }
         .task {
+            viewModel.setLiveProtectionEnabled(liveProtectionEnabled)
             if viewModel.report == nil {
                 viewModel.refresh()
             }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            viewModel.handleAppDidBecomeActive()
+        }
+        .onChange(of: liveProtectionEnabled) { enabled in
+            viewModel.setLiveProtectionEnabled(enabled)
+        }
+        .onChange(of: viewModel.report?.generatedAt) { _ in
+            ensureSelectedScope()
         }
     }
 
@@ -80,11 +116,11 @@ struct ScopeInventoryWindow: View {
 
     @ViewBuilder
     private var detailView: some View {
-        switch selection ?? .overview {
-        case .overview:
-            overviewSection
-        case .inventory:
-            inventorySection
+        switch selection ?? .dashboard {
+        case .dashboard:
+            dashboardSection
+        case .history:
+            historySection
         case .logs:
             logsSection
         case .settings:
@@ -92,39 +128,25 @@ struct ScopeInventoryWindow: View {
         }
     }
 
-    private var overviewSection: some View {
+    private var dashboardSection: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
                 pageHeader(
                     title: "Google Drive Icon Guard",
-                    subtitle: "Current beta app shell for scope discovery, audit visibility, and the next stage of the macOS app."
+                    subtitle: "Confirm the detected locations, review current artefacts, and take action from one place."
                 )
 
                 stats
+                journeySection
+                liveProtectionPanel
+                permissionRetryNotice
+                inventoryReviewSection
+                warningsSection
+                historyComparisonSection
+                privacyGuidancePanel
 
-                VStack(alignment: .leading, spacing: 12) {
-                    Text("Current status")
-                        .font(.headline)
-
-                    infoCard(
-                        title: "What works now",
-                        lines: [
-                            "DriveFS root preference discovery",
-                            "Scope classification and support status",
-                            "Audit-only hidden artefact scanning",
-                            "Latest plus historical inventory persistence",
-                            "Minimal SwiftUI viewer for review"
-                        ]
-                    )
-
-                    infoCard(
-                        title: "Next app milestones",
-                        lines: [
-                            "Deeper DriveFS parsing beyond root preferences",
-                            "Richer control-plane flows for logs and settings",
-                            "Beta release packaging for a downloadable app"
-                        ]
-                    )
+                if let exportMessage {
+                    inlineNotice(title: "Export", systemImage: "square.and.arrow.up", message: exportMessage)
                 }
 
                 if let persistedPath = viewModel.persistedPath {
@@ -140,23 +162,24 @@ struct ScopeInventoryWindow: View {
             }
             .padding(20)
         }
-        .navigationTitle("Overview")
+        .navigationTitle("Dashboard")
     }
 
-    private var inventorySection: some View {
+    private var historySection: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
                 pageHeader(
-                    title: "Scope Inventory",
-                    subtitle: "Discovered Drive-managed locations, support status, and the current persisted inventory state."
+                    title: "Snapshot History",
+                    subtitle: "Recent persisted inventory snapshots and the current delta against the last snapshot."
                 )
-                stats
-                scopesSection
-                warningsSection
+
+                historyComparisonSection
+                historyChangeSection
+                recentHistorySection(limit: historyLimit)
             }
             .padding(20)
         }
-        .navigationTitle("Inventory")
+        .navigationTitle("History")
     }
 
     private var logsSection: some View {
@@ -164,14 +187,9 @@ struct ScopeInventoryWindow: View {
             VStack(alignment: .leading, spacing: 18) {
                 pageHeader(
                     title: "Logs",
-                    subtitle: "Reserved for audit events, incidents, and later helper-driven activity."
+                    subtitle: "Review-oriented activity feed derived from scans, warnings, and snapshot history."
                 )
-
-                placeholderPanel(
-                    title: "Not implemented yet",
-                    systemImage: "text.justify.left",
-                    description: "The current beta app shell does not yet persist or present event logs. This section exists so the app structure is ready for later audit and incident views."
-                )
+                activityFeedSection
             }
             .padding(20)
         }
@@ -183,14 +201,12 @@ struct ScopeInventoryWindow: View {
             VStack(alignment: .leading, spacing: 18) {
                 pageHeader(
                     title: "Settings",
-                    subtitle: "Reserved for future app preferences, per-scope policy controls, and environment guidance."
+                    subtitle: "Viewer preferences for review workflows in the current beta app."
                 )
 
-                placeholderPanel(
-                    title: "Not implemented yet",
-                    systemImage: "slider.horizontal.3",
-                    description: "The current beta app shell does not yet expose configurable policies or settings. This section is the intended home for later per-scope controls and app preferences."
-                )
+                privacyGuidancePanel
+                liveProtectionPanel
+                settingsPanel
             }
             .padding(20)
         }
@@ -216,8 +232,51 @@ struct ScopeInventoryWindow: View {
             statCard(title: "Supported", value: "\(scopes.filter { $0.supportStatus == .supported }.count)")
             statCard(title: "Audit Only", value: "\(scopes.filter { $0.supportStatus == .auditOnly }.count)")
             statCard(title: "Artefacts", value: "\(artefactInventory?.totalArtefactCount ?? 0)")
-            statCard(title: "Impact", value: formattedByteCount(artefactInventory?.totalBytes ?? 0))
+            statCard(title: "Disk Impact", value: formattedByteCount(artefactInventory?.totalBytes ?? 0))
         }
+    }
+
+    private var journeySection: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("Current review path")
+                .font(.headline)
+
+            HStack(alignment: .top, spacing: 12) {
+                journeyStep(
+                    title: "1. Confirm locations",
+                    detail: "\(detectedScopeSummary) detected from Google Drive state.",
+                    status: viewModel.report == nil ? "Loading" : "Ready"
+                )
+                journeyStep(
+                    title: "2. Review findings",
+                    detail: findingsSummary,
+                    status: findingsStatus
+                )
+                journeyStep(
+                    title: "3. Take action",
+                    detail: actionSummary,
+                    status: actionStatus
+                )
+            }
+
+            HStack(spacing: 12) {
+                Button("Refresh Scan") {
+                    viewModel.refresh()
+                }
+
+                Button("Export Findings") {
+                    exportFindings()
+                }
+                .disabled(viewModel.report == nil)
+
+                Button("Reveal App Data") {
+                    revealStorageRoot()
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(16)
+        .background(.quaternary.opacity(0.35), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
     }
 
     private var scopesSection: some View {
@@ -234,7 +293,10 @@ struct ScopeInventoryWindow: View {
             } else if let report = viewModel.report, !report.scopes.isEmpty {
                 VStack(spacing: 10) {
                     ForEach(report.scopes) { scope in
-                        VStack(alignment: .leading, spacing: 8) {
+                        Button {
+                            selectedScopeID = scope.id
+                        } label: {
+                            VStack(alignment: .leading, spacing: 8) {
                             HStack(alignment: .center) {
                                 Text(scope.displayName)
                                     .font(.headline)
@@ -267,12 +329,18 @@ struct ScopeInventoryWindow: View {
                                 HStack(spacing: 10) {
                                     badge(scanStatusLabel(scanResult.scanStatus), tint: scanStatusColor(scanResult.scanStatus))
                                     metadataLabel("Matches", value: "\(scanResult.matchedArtefactCount)")
-                                    metadataLabel("Bytes", value: formattedByteCount(scanResult.matchedBytes))
+                                    metadataLabel("Disk Impact", value: formattedByteCount(scanResult.matchedBytes))
                                 }
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
 
-                                if !scanResult.sampleMatches.isEmpty {
+                                if scanResult.scanStatus == .scanned {
+                                    Text(scanCoverageText(for: scanResult))
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+
+                                if showSampleMatches, !scanResult.sampleMatches.isEmpty {
                                     VStack(alignment: .leading, spacing: 4) {
                                         Text("Sample matches")
                                             .font(.caption.weight(.semibold))
@@ -283,18 +351,32 @@ struct ScopeInventoryWindow: View {
                                                     .font(.system(.caption, design: .monospaced))
                                                     .textSelection(.enabled)
                                                 Spacer(minLength: 12)
-                                                Text(sample.ruleName)
+                                                VStack(alignment: .trailing, spacing: 4) {
+                                                    Text(sample.ruleName)
+                                                        .font(.caption)
+                                                        .foregroundStyle(.secondary)
+
+                                                    Button("Reveal") {
+                                                        revealMatchInFinder(scopePath: scope.path, relativePath: sample.relativePath)
+                                                    }
                                                     .font(.caption)
-                                                    .foregroundStyle(.secondary)
+                                                    .buttonStyle(.link)
+                                                }
                                             }
                                         }
                                     }
                                 }
                             }
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(14)
+                            .background(cardBackground(for: scope), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                    .stroke(selectedScopeID == scope.id ? Color.accentColor : Color.clear, lineWidth: 1.5)
+                            )
                         }
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(14)
-                        .background(.quaternary.opacity(0.35), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                        .buttonStyle(.plain)
                     }
                 }
             } else if viewModel.isLoading {
@@ -306,6 +388,22 @@ struct ScopeInventoryWindow: View {
                 emptyState(
                     title: "No scopes discovered",
                     systemImage: "externaldrive.badge.questionmark"
+                )
+            }
+        }
+    }
+
+    private var inventoryReviewSection: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            scopesSection
+
+            if let scope = selectedScope, let plan = viewModel.reviewPlan(for: scope) {
+                scopeDetailSection(scope: scope, plan: plan)
+            } else if let report = viewModel.report, report.scopes.isEmpty == false {
+                emptyState(
+                    title: "Select a scope",
+                    systemImage: "sidebar.left",
+                    description: "Choose a discovered scope to review rationale, findings, and the recommended next step."
                 )
             }
         }
@@ -340,6 +438,616 @@ struct ScopeInventoryWindow: View {
         }
     }
 
+    private func scopeDetailSection(scope: DriveManagedScope, plan: ScopeReviewPlan) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Scope review")
+                        .font(.headline)
+                    Text(scope.displayName)
+                        .font(.title3.weight(.semibold))
+                }
+
+                Spacer()
+
+                badge(plan.priority.rawValue, tint: reviewPriorityColor(plan.priority))
+            }
+
+            Text(plan.headline)
+                .font(.headline)
+
+            Text(plan.recommendedAction)
+                .foregroundStyle(.secondary)
+
+            primaryScopeActionBar(scope: scope)
+
+            Divider()
+
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Why this scope is in this bucket")
+                    .font(.subheadline.weight(.semibold))
+
+                ForEach(plan.rationale, id: \.self) { reason in
+                    Label(reason, systemImage: "checkmark.seal")
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            if !plan.operatorNotes.isEmpty {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Operator notes")
+                        .font(.subheadline.weight(.semibold))
+
+                    ForEach(plan.operatorNotes, id: \.self) { note in
+                        Label(note, systemImage: "info.circle")
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+
+            if let scanResult = artefactScanResult(for: scope) {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Scan coverage")
+                        .font(.subheadline.weight(.semibold))
+
+                    if scanResult.scanStatus == .scanned {
+                        HStack(spacing: 10) {
+                            metadataLabel("Directories", value: "\(scanResult.scannedDirectoryCount)")
+                            metadataLabel("Files Inspected", value: "\(scanResult.inspectedFileCount)")
+                            metadataLabel("Symlinks Skipped", value: "\(scanResult.skippedSymbolicLinkCount)")
+                        }
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+
+                        Text("This scope was scanned recursively from the displayed root path. Nested subfolders are included; symbolic links are skipped to avoid double-counting or traversing outside the scope boundary.")
+                            .foregroundStyle(.secondary)
+                    } else {
+                        Text("Coverage details are only available when the latest scan completed successfully.")
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Artefact breakdown")
+                        .font(.subheadline.weight(.semibold))
+
+                    if !scanResult.artefactSummaries.isEmpty {
+                        VStack(spacing: 8) {
+                            ForEach(scanResult.artefactSummaries) { summary in
+                                HStack {
+                                    Text(artefactTypeLabel(summary.artefactType))
+                                    Spacer()
+                                    Text("\(summary.count)")
+                                        .foregroundStyle(.secondary)
+                                    Text(formattedByteCount(summary.totalBytes))
+                                        .foregroundStyle(.secondary)
+                                }
+                                .font(.caption)
+                            }
+                        }
+                    } else {
+                        Text("No type breakdown is available because the latest scan found no artefacts.")
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+
+            remediationSection(for: scope)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(16)
+        .background(.quaternary.opacity(0.35), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+
+    private func primaryScopeActionBar(scope: DriveManagedScope) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Actions")
+                .font(.subheadline.weight(.semibold))
+
+            HStack(spacing: 12) {
+                Button(primaryCleanupButtonTitle(for: scope)) {
+                    startCleanupJourney(for: scope)
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(scope.supportStatus != .supported)
+
+                Button("Preview Dry Run") {
+                    viewModel.prepareDryRunRemediation(for: scope)
+                }
+                .disabled(scope.supportStatus != .supported)
+
+                Button("Reveal Scope") {
+                    revealInFinder(path: scope.path)
+                }
+
+                Button("Export Scope Findings") {
+                    exportScopeFindings(scope)
+                }
+            }
+
+            HStack(spacing: 12) {
+                if let persistedPath = viewModel.persistedPath {
+                    Button("Reveal Snapshot") {
+                        revealInFinder(path: persistedPath)
+                    }
+                }
+
+                Button("Export Full Findings") {
+                    exportFindings()
+                }
+            }
+
+            Text(primaryCleanupHelperText(for: scope))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private func remediationSection(for scope: DriveManagedScope) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Divider()
+
+            HStack {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Dry-run remediation")
+                        .font(.headline)
+                    Text("Supported scopes can generate a candidate cleanup preview without touching the filesystem.")
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+            }
+
+            if scope.supportStatus == .supported {
+                HStack(spacing: 12) {
+                    Button("Export Dry-Run Script") {
+                        exportDryRunScript(for: scope)
+                    }
+                }
+
+                if let preview = selectedRemediationPreview(for: scope) {
+                    remediationPreviewPanel(preview)
+                } else {
+                    Text("Use the action bar above to prepare cleanup. The preview will appear here before any deletion is confirmed.")
+                        .foregroundStyle(.secondary)
+                }
+
+                if let result = selectedRemediationApplyResult(for: scope) {
+                    remediationApplyResultPanel(result)
+                }
+            } else {
+                Text("Dry-run remediation is only available for scopes currently marked as supported.")
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private func remediationPreviewPanel(_ preview: ScopeRemediationPreview) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                badge(preview.status.rawValue, tint: remediationStatusColor(preview.status))
+                Spacer()
+                Text("\(preview.totalCandidateCount) candidate(s)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Text(preview.recommendedAction)
+                .foregroundStyle(.secondary)
+
+            if preview.totalCandidateCount > 0 {
+                HStack(spacing: 10) {
+                    metadataLabel("Candidates", value: "\(preview.totalCandidateCount)")
+                    metadataLabel("Disk Impact", value: formattedByteCount(preview.totalBytes))
+                    if preview.previewTruncated {
+                        metadataLabel("Preview", value: "truncated")
+                    }
+                }
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            }
+
+            if !preview.candidates.isEmpty {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Preview candidates")
+                        .font(.subheadline.weight(.semibold))
+
+                    ForEach(preview.candidates.prefix(12)) { candidate in
+                        HStack(alignment: .top, spacing: 8) {
+                            Text(candidate.relativePath)
+                                .font(.system(.caption, design: .monospaced))
+                                .textSelection(.enabled)
+                            Spacer()
+                            VStack(alignment: .trailing, spacing: 4) {
+                                Text(artefactTypeLabel(candidate.artefactType))
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+
+                                Button("Reveal") {
+                                    revealMatchInFinder(scopePath: preview.scopePath, relativePath: candidate.relativePath)
+                                }
+                                .font(.caption)
+                                .buttonStyle(.link)
+                            }
+                        }
+                    }
+                }
+            }
+
+            if !preview.warnings.isEmpty {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Dry-run warnings")
+                        .font(.subheadline.weight(.semibold))
+                    ForEach(preview.warnings, id: \.code) { warning in
+                        Text("\(warning.code): \(warning.message)")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(14)
+        .background(.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+    }
+
+    private func remediationApplyResultPanel(_ result: ScopeRemediationApplyResult) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                badge(result.status.rawValue, tint: remediationApplyStatusColor(result.status))
+                Spacer()
+                Text("\(result.removedCount) removed")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Text(result.message)
+                .foregroundStyle(.secondary)
+
+            if result.removedCount > 0 {
+                HStack(spacing: 10) {
+                    metadataLabel("Removed", value: "\(result.removedCount)")
+                    metadataLabel("Disk Impact", value: formattedByteCount(result.removedBytes))
+                }
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            }
+
+            if !result.warnings.isEmpty {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Cleanup warnings")
+                        .font(.subheadline.weight(.semibold))
+                    ForEach(result.warnings, id: \.self) { warning in
+                        Text("\(warning.code): \(warning.message)")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(14)
+        .background(.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+    }
+
+    private var historyComparisonSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Snapshot comparison")
+                .font(.headline)
+
+            if let comparison = viewModel.historyComparison {
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Current snapshot versus \(formattedTimestamp(comparison.previousGeneratedAt))")
+                        .foregroundStyle(.secondary)
+
+                    HStack(spacing: 12) {
+                        comparisonDeltaCard(title: "Artefacts", delta: comparison.delta.artefactCount)
+                        comparisonDeltaCard(title: "Disk Impact", deltaText: formattedDeltaBytes(comparison.delta.totalBytes), isPositive: comparison.delta.totalBytes >= 0)
+                        comparisonDeltaCard(title: "Scopes", delta: comparison.delta.scopeCount)
+                        comparisonDeltaCard(title: "Warnings", delta: comparison.delta.warningCount)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(14)
+                .background(.quaternary.opacity(0.35), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            } else if viewModel.isLoading {
+                emptyState(
+                    title: "Loading history",
+                    systemImage: "clock.arrow.circlepath"
+                )
+            } else {
+                emptyState(
+                    title: "No previous snapshot yet",
+                    systemImage: "clock.badge.questionmark",
+                    description: "Refresh the inventory more than once to start comparing persisted snapshots."
+                )
+            }
+        }
+    }
+
+    private var historyChangeSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Scope-level changes")
+                .font(.headline)
+
+            if let comparison = viewModel.historyComparison, !comparison.delta.perScopeChanges.isEmpty {
+                VStack(spacing: 10) {
+                    ForEach(comparison.delta.perScopeChanges.prefix(10)) { change in
+                        VStack(alignment: .leading, spacing: 6) {
+                            HStack {
+                                Text(change.displayName)
+                                    .font(.headline)
+                                Spacer()
+                                badge(change.changeKind.rawValue, tint: historyChangeColor(change.changeKind))
+                            }
+
+                            Text(change.scopePath)
+                                .font(.system(.caption, design: .monospaced))
+                                .foregroundStyle(.secondary)
+                                .textSelection(.enabled)
+
+                            HStack(spacing: 10) {
+                                metadataLabel("Artefacts", value: formattedSignedValue(change.artefactDelta))
+                                metadataLabel("Disk Impact", value: formattedDeltaBytes(change.byteDelta))
+                                metadataLabel("Warnings", value: formattedSignedValue(change.warningDelta))
+                            }
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+
+                            HStack(spacing: 12) {
+                                Button("Review Scope") {
+                                    reviewScope(atPath: change.scopePath)
+                                }
+
+                                Button("Reveal in Finder") {
+                                    revealInFinder(path: change.scopePath)
+                                }
+                            }
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(14)
+                        .background(.quaternary.opacity(0.35), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    }
+                }
+            } else {
+                emptyState(
+                    title: "No scope-level changes yet",
+                    systemImage: "arrow.left.arrow.right",
+                    description: "After a second snapshot, this section will show which scopes were added, removed, or changed."
+                )
+            }
+        }
+    }
+
+    private func recentHistorySection(limit: Int) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Recent snapshots")
+                .font(.headline)
+
+            if !viewModel.recentSnapshots.isEmpty {
+                VStack(spacing: 10) {
+                    ForEach(Array(viewModel.recentSnapshots.prefix(max(1, limit)).enumerated()), id: \.element.url.path) { entry in
+                        let snapshot = entry.element
+                        let report = snapshot.report
+
+                        VStack(alignment: .leading, spacing: 8) {
+                            HStack {
+                                Text(formattedTimestamp(report.generatedAt))
+                                    .font(.headline)
+
+                                Spacer()
+
+                                if entry.offset == 0 {
+                                    badge("latest", tint: .blue)
+                                }
+                            }
+
+                            HStack(spacing: 10) {
+                                metadataLabel("Scopes", value: "\(report.scopes.count)")
+                                metadataLabel("Artefacts", value: "\(report.artefactInventory.totalArtefactCount)")
+                                metadataLabel("Disk Impact", value: formattedByteCount(report.artefactInventory.totalBytes))
+                                metadataLabel("Warnings", value: "\(combinedWarningCount(for: report))")
+                            }
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+
+                            Text(snapshot.url.lastPathComponent)
+                                .font(.system(.caption, design: .monospaced))
+                                .foregroundStyle(.secondary)
+                                .textSelection(.enabled)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(14)
+                        .background(.quaternary.opacity(0.35), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    }
+                }
+            } else if viewModel.isLoading {
+                emptyState(
+                    title: "Loading snapshots",
+                    systemImage: "clock.arrow.circlepath"
+                )
+            } else {
+                emptyState(
+                    title: "No snapshots found",
+                    systemImage: "clock.badge.exclamationmark",
+                    description: "No persisted history snapshots were available in the cache directory."
+                )
+            }
+        }
+    }
+
+    private var activityFeedSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Activity feed")
+                .font(.headline)
+
+            if !persistedActivityItems.isEmpty {
+                VStack(spacing: 10) {
+                    ForEach(persistedActivityItems) { item in
+                        VStack(alignment: .leading, spacing: 8) {
+                            HStack(alignment: .top) {
+                                Label(item.title, systemImage: item.systemImage)
+                                    .font(.headline)
+                                    .foregroundStyle(item.tint)
+                                Spacer()
+                                if let timestamp = item.timestamp {
+                                    Text(formattedTimestamp(timestamp))
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
+
+                            Text(item.detail)
+                                .foregroundStyle(.secondary)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(14)
+                        .background(.quaternary.opacity(0.35), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    }
+                }
+            } else {
+                emptyState(
+                    title: "No activity yet",
+                    systemImage: "text.justify.left",
+                    description: "Refresh the inventory to generate activity from the current report and persisted history."
+                )
+            }
+        }
+    }
+
+    private var settingsPanel: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Toggle("Show sample match paths in inventory cards", isOn: $showSampleMatches)
+            Toggle("Include warnings in the activity feed", isOn: $showWarningsInLogs)
+            Toggle("Keep future helper protection armed", isOn: $liveProtectionEnabled)
+
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Recent snapshot count")
+                    .font(.subheadline.weight(.semibold))
+                Stepper(value: $historyLimit, in: 3...12) {
+                    Text("Show \(historyLimit) snapshots in history views")
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            if let persistedPath = viewModel.persistedPath {
+                Divider()
+                Text("Latest snapshot path")
+                    .font(.subheadline.weight(.semibold))
+                Text(persistedPath)
+                    .font(.system(.footnote, design: .monospaced))
+                    .foregroundStyle(.secondary)
+                    .textSelection(.enabled)
+            }
+
+            Divider()
+
+            VStack(alignment: .leading, spacing: 8) {
+                Text("App data folder")
+                    .font(.subheadline.weight(.semibold))
+                Text(viewModel.storageRootPath)
+                    .font(.system(.footnote, design: .monospaced))
+                    .foregroundStyle(.secondary)
+                    .textSelection(.enabled)
+
+                HStack(spacing: 12) {
+                    Button("Reveal App Data") {
+                        revealStorageRoot()
+                    }
+
+                    Button("Reset Stored Data") {
+                        confirmAndResetStoredData()
+                    }
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(16)
+        .background(.quaternary.opacity(0.35), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+
+    private var privacyGuidancePanel: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Label("Privacy & Security", systemImage: "lock.shield")
+                .font(.headline)
+
+            if !permissionWarnings.isEmpty {
+                Text("The latest refresh hit one or more permission-denied paths. Review the guidance below before assuming the app needs broad system access.")
+                    .foregroundStyle(.secondary)
+            } else {
+                Text("This beta app does not need special permission to save its own snapshots. Privacy prompts only matter when macOS blocks discovery or scanning in protected folders.")
+                    .foregroundStyle(.secondary)
+            }
+
+            Label("Desktop, Documents, and Downloads scopes may need Files and Folders access.", systemImage: "folder.badge.questionmark")
+                .foregroundStyle(.secondary)
+            Label("Full Disk Access is optional for this beta app and should only be used if macOS keeps denying multiple protected paths during audit scans.", systemImage: "internaldrive")
+                .foregroundStyle(.secondary)
+            Label("Google Drive metadata under Library paths may trigger broader access requirements on some systems if macOS blocks discovery.", systemImage: "externaldrive.badge.icloud")
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(16)
+        .background(.quaternary.opacity(0.35), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+
+    private var liveProtectionPanel: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Label("Live Protection", systemImage: liveProtectionActive ? "shield.lefthalf.filled" : "shield.slash")
+                .font(.headline)
+
+            Text(viewModel.protectionStatus.detail)
+                .foregroundStyle(.secondary)
+
+            HStack(spacing: 10) {
+                badge(liveProtectionActive ? "active" : "audit only", tint: liveProtectionActive ? .green : .orange)
+                metadataLabel("Auto-Blocked Scopes", value: "\(viewModel.protectionStatus.activeProtectedScopeCount)")
+            }
+            .font(.caption)
+            .foregroundStyle(.secondary)
+
+            Text(viewModel.protectionStatus.eventSourceDescription)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            if let helperPath = viewModel.protectionStatus.helperExecutablePath {
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack(spacing: 10) {
+                        metadataLabel("Helper Host", value: "bundled")
+                        Button("Reveal Helper") {
+                            revealInFinder(path: helperPath)
+                        }
+                        .buttonStyle(.link)
+                    }
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                    Text(helperPath)
+                        .font(.system(.caption, design: .monospaced))
+                        .foregroundStyle(.secondary)
+                        .textSelection(.enabled)
+                }
+            } else {
+                Text("No standalone helper host was found in the current build output. The app can still audit and clean up manually, but true Google-Drive-only blocking is not packaged yet.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(16)
+        .background(.quaternary.opacity(0.35), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+
+    @ViewBuilder
+    private var permissionRetryNotice: some View {
+        if viewModel.pendingPermissionRetry {
+            inlineNotice(
+                title: "Permission Prompt In Progress",
+                systemImage: "lock.open.trianglebadge.exclamationmark",
+                message: "The first scan hit macOS permission-denied paths before access was fully granted. The app will retry automatically when it becomes active again after you finish the prompt."
+            )
+        }
+    }
+
     private func statCard(title: String, value: String) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             Text(title)
@@ -353,12 +1061,68 @@ struct ScopeInventoryWindow: View {
         .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
     }
 
+    private func journeyStep(title: String, detail: String, status: String) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text(title)
+                    .font(.headline)
+                Spacer()
+                badge(status.lowercased(), tint: journeyStatusColor(status))
+            }
+
+            Text(detail)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(14)
+        .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+
+    private func comparisonDeltaCard(title: String, delta: Int) -> some View {
+        comparisonDeltaCard(
+            title: title,
+            deltaText: formattedSignedValue(delta),
+            isPositive: delta >= 0
+        )
+    }
+
+    private func comparisonDeltaCard(title: String, deltaText: String, isPositive: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(title)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Text(deltaText)
+                .font(.system(size: 24, weight: .semibold))
+                .foregroundStyle(isPositive ? .green : .orange)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(14)
+        .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+
     private func infoCard(title: String, lines: [String]) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(title)
                 .font(.headline)
             ForEach(lines, id: \.self) { line in
                 Label(line, systemImage: "checkmark.circle")
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(14)
+        .background(.quaternary.opacity(0.35), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+
+    private func inlineNotice(title: String, systemImage: String, message: String) -> some View {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: systemImage)
+                .foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title)
+                    .font(.headline)
+                Text(message)
                     .foregroundStyle(.secondary)
             }
         }
@@ -439,12 +1203,139 @@ struct ScopeInventoryWindow: View {
         }
     }
 
+    private func journeyStatusColor(_ status: String) -> Color {
+        switch status.lowercased() {
+        case "ready", "protected", "clean":
+            return .green
+        case "review":
+            return .orange
+        case "loading":
+            return .blue
+        default:
+            return .secondary
+        }
+    }
+
     private var combinedWarnings: [DiscoveryWarning] {
         guard let report = viewModel.report else {
             return []
         }
 
         return report.warnings + report.artefactInventory.warnings
+    }
+
+    private var protectedScopeCount: Int {
+        viewModel.protectionStatus.activeProtectedScopeCount
+    }
+
+    private var liveProtectionActive: Bool {
+        liveProtectionEnabled && protectedScopeCount > 0
+    }
+
+    private var detectedScopeSummary: String {
+        guard let report = viewModel.report else {
+            return "Locations"
+        }
+
+        let supported = report.scopes.filter { $0.supportStatus == .supported }.count
+        let auditOnly = report.scopes.filter { $0.supportStatus == .auditOnly }.count
+        return "\(report.scopes.count) locations (\(supported) supported, \(auditOnly) audit-only)"
+    }
+
+    private var findingsSummary: String {
+        guard let report = viewModel.report else {
+            return "Waiting for the first scan to complete."
+        }
+
+        let artefacts = report.artefactInventory.totalArtefactCount
+        let matchedScopes = report.artefactInventory.matchedScopeCount
+        if artefacts == 0 {
+            return "No known icon artefacts are currently matched across the detected locations."
+        }
+
+        return "\(artefacts) artefact(s) across \(matchedScopes) location(s), using \(formattedByteCount(report.artefactInventory.totalBytes))."
+    }
+
+    private var findingsStatus: String {
+        guard let report = viewModel.report else {
+            return "Loading"
+        }
+
+        return report.artefactInventory.totalArtefactCount == 0 ? "Clean" : "Review"
+    }
+
+    private var actionSummary: String {
+        guard let report = viewModel.report else {
+            return "Refresh will load locations, findings, and actions."
+        }
+
+        if report.scopes.isEmpty {
+            return "No Drive-managed locations were found yet. Refresh after confirming Google Drive is running."
+        }
+
+        if liveProtectionActive {
+            return "Live protection is active for \(protectedScopeCount) supported location(s), and each selected location exposes reveal, export, preview, and cleanup actions."
+        }
+
+        return "Select a location below for reveal, export, preview, and cleanup actions. Automatic blocking stays in audit mode until process-aware helper support exists."
+    }
+
+    private var actionStatus: String {
+        guard let report = viewModel.report, !report.scopes.isEmpty else {
+            return "Loading"
+        }
+
+        if liveProtectionActive {
+            return "Protected"
+        }
+
+        return "Ready"
+    }
+
+    private var permissionWarnings: [DiscoveryWarning] {
+        combinedWarnings.filter { $0.code.contains("permission_denied") }
+    }
+
+    private var selectedScope: DriveManagedScope? {
+        guard let report = viewModel.report else {
+            return nil
+        }
+
+        if let selectedScopeID, let selected = report.scopes.first(where: { $0.id == selectedScopeID }) {
+            return selected
+        }
+
+        return report.scopes.first
+    }
+
+    private var persistedActivityItems: [ActivityItem] {
+        let events = viewModel.activityLog.events.prefix(40)
+
+        var items = events.map { event in
+            ActivityItem(
+                id: event.id.uuidString,
+                title: activityTitle(for: event),
+                detail: activityDetail(for: event),
+                systemImage: activityIcon(for: event),
+                tint: activityTint(for: event),
+                timestamp: event.timestamp
+            )
+        }
+
+        if showWarningsInLogs, let report = viewModel.report {
+            items.append(contentsOf: combinedWarnings.prefix(8).enumerated().map { index, warning in
+                ActivityItem(
+                    id: "warning-\(index)-\(warning.code)",
+                    title: warning.code,
+                    detail: warning.message,
+                    systemImage: "exclamationmark.triangle",
+                    tint: .orange,
+                    timestamp: report.generatedAt
+                )
+            })
+        }
+
+        return items
     }
 
     private func artefactScanResult(for scope: DriveManagedScope) -> ScopeArtefactScanResult? {
@@ -479,5 +1370,400 @@ struct ScopeInventoryWindow: View {
 
     private func formattedByteCount(_ bytes: Int) -> String {
         ByteCountFormatter.string(fromByteCount: Int64(bytes), countStyle: .file)
+    }
+
+    private func formattedDeltaBytes(_ bytes: Int) -> String {
+        let prefix = bytes >= 0 ? "+" : "-"
+        return prefix + ByteCountFormatter.string(fromByteCount: Int64(abs(bytes)), countStyle: .file)
+    }
+
+    private func formattedSignedValue(_ value: Int) -> String {
+        if value > 0 {
+            return "+\(value)"
+        }
+        return "\(value)"
+    }
+
+    private func formattedTimestamp(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .short
+        return formatter.string(from: date)
+    }
+
+    private func combinedWarningCount(for report: ScopeInventoryReport) -> Int {
+        report.warnings.count + report.artefactInventory.warnings.count
+    }
+
+    private func selectedRemediationPreview(for scope: DriveManagedScope) -> ScopeRemediationPreview? {
+        guard let preview = viewModel.remediationPreview, preview.scopeID == scope.id else {
+            return nil
+        }
+
+        return preview
+    }
+
+    private func selectedRemediationApplyResult(for scope: DriveManagedScope) -> ScopeRemediationApplyResult? {
+        guard let result = viewModel.remediationApplyResult, result.scopeID == scope.id else {
+            return nil
+        }
+
+        return result
+    }
+
+    private func artefactTypeLabel(_ type: ArtefactType) -> String {
+        switch type {
+        case .iconFile:
+            return "Finder Icon file"
+        case .iconSidecar:
+            return "AppleDouble sidecar"
+        case .folderMetadata:
+            return "Folder metadata"
+        case .unknown:
+            return "Unknown"
+        }
+    }
+
+    private func scanCoverageText(for scanResult: ScopeArtefactScanResult) -> String {
+        var parts = [
+            "\(scanResult.scannedDirectoryCount) director\(scanResult.scannedDirectoryCount == 1 ? "y" : "ies")",
+            "\(scanResult.inspectedFileCount) file\(scanResult.inspectedFileCount == 1 ? "" : "s") inspected"
+        ]
+
+        if scanResult.skippedSymbolicLinkCount > 0 {
+            parts.append("\(scanResult.skippedSymbolicLinkCount) symlink\(scanResult.skippedSymbolicLinkCount == 1 ? "" : "s") skipped")
+        }
+
+        return "Recursive coverage: " + parts.joined(separator: ", ")
+    }
+
+    private func reviewPriorityColor(_ priority: ScopeReviewPriority) -> Color {
+        switch priority {
+        case .ready:
+            return .green
+        case .attention:
+            return .orange
+        case .monitor:
+            return .blue
+        case .blocked:
+            return .red
+        }
+    }
+
+    private func remediationStatusColor(_ status: ScopeRemediationPreviewStatus) -> Color {
+        switch status {
+        case .ready:
+            return .green
+        case .noCandidates:
+            return .blue
+        case .unavailable:
+            return .orange
+        case .unreadable:
+            return .red
+        }
+    }
+
+    private func remediationApplyStatusColor(_ status: ScopeRemediationApplyStatus) -> Color {
+        switch status {
+        case .applied:
+            return .green
+        case .partialFailure:
+            return .orange
+        case .noCandidates:
+            return .blue
+        case .unavailable:
+            return .orange
+        case .unreadable:
+            return .red
+        }
+    }
+
+    private func primaryCleanupButtonTitle(for scope: DriveManagedScope) -> String {
+        guard scope.supportStatus == .supported else {
+            return "Cleanup Unavailable"
+        }
+
+        if selectedRemediationPreview(for: scope)?.status == .ready {
+            return "Apply Cleanup"
+        }
+
+        return "Apply Cleanup"
+    }
+
+    private func primaryCleanupHelperText(for scope: DriveManagedScope) -> String {
+        guard scope.supportStatus == .supported else {
+            return "Cleanup stays disabled for audit-only and unsupported locations."
+        }
+
+        if selectedRemediationPreview(for: scope)?.status == .ready {
+            return "The current preview is ready. Apply Cleanup will confirm deletion of the matched artefacts shown below."
+        }
+
+        return "Apply Cleanup starts with a dry-run preview if one is not ready yet, so the user still sees the exact candidates before deletion."
+    }
+
+    private func historyChangeColor(_ change: ScopeHistoryChangeKind) -> Color {
+        switch change {
+        case .added:
+            return .green
+        case .removed:
+            return .red
+        case .changed:
+            return .blue
+        }
+    }
+
+    private func cardBackground(for scope: DriveManagedScope) -> some ShapeStyle {
+        selectedScopeID == scope.id ? Color.accentColor.opacity(0.08) : Color.secondary.opacity(0.08)
+    }
+
+    private func revealInFinder(path: String) {
+        NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: path)])
+    }
+
+    private func revealStorageRoot() {
+        let storageURL = URL(fileURLWithPath: viewModel.storageRootPath, isDirectory: true)
+        let targetURL: URL
+
+        if FileManager.default.fileExists(atPath: storageURL.path) {
+            targetURL = storageURL
+        } else {
+            targetURL = storageURL.deletingLastPathComponent()
+        }
+
+        NSWorkspace.shared.activateFileViewerSelecting([targetURL])
+    }
+
+    private func revealMatchInFinder(scopePath: String, relativePath: String) {
+        let rootURL = URL(fileURLWithPath: scopePath, isDirectory: true)
+        let targetURL = rootURL.appendingPathComponent(relativePath)
+        NSWorkspace.shared.activateFileViewerSelecting([targetURL])
+    }
+
+    private func ensureSelectedScope() {
+        guard let report = viewModel.report else {
+            selectedScopeID = nil
+            return
+        }
+
+        if let selectedScopeID, report.scopes.contains(where: { $0.id == selectedScopeID }) {
+            return
+        }
+
+        selectedScopeID = report.scopes.first?.id
+    }
+
+    private func reviewScope(atPath path: String) {
+        guard let scope = viewModel.report?.scopes.first(where: { $0.path == path }) else {
+            selection = .dashboard
+            return
+        }
+
+        selection = .dashboard
+        selectedScopeID = scope.id
+    }
+
+    private func startCleanupJourney(for scope: DriveManagedScope) {
+        guard scope.supportStatus == .supported else {
+            exportMessage = "Cleanup is only available for supported locations."
+            return
+        }
+
+        if selectedRemediationPreview(for: scope)?.status == .ready {
+            confirmAndApplyCleanup(for: scope)
+            return
+        }
+
+        viewModel.prepareDryRunRemediation(for: scope)
+        exportMessage = "Dry-run preview prepared for \(scope.displayName). Review the candidates below, then press Apply Cleanup again."
+    }
+
+    private func confirmAndApplyCleanup(for scope: DriveManagedScope) {
+        guard let preview = selectedRemediationPreview(for: scope), preview.status == .ready else {
+            exportMessage = "Prepare a dry-run preview before applying cleanup."
+            return
+        }
+
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = "Apply cleanup for \(scope.displayName)?"
+        alert.informativeText = "This will permanently remove \(preview.totalCandidateCount) matched artefact file(s) using \(formattedByteCount(preview.totalBytes)). The app will not follow symlinks, and it will refresh the inventory after cleanup."
+        alert.addButton(withTitle: "Apply Cleanup")
+        alert.addButton(withTitle: "Cancel")
+
+        guard alert.runModal() == .alertFirstButtonReturn else {
+            return
+        }
+
+        let result = viewModel.applyCleanup(for: scope)
+        exportMessage = result.message
+    }
+
+    private func confirmAndResetStoredData() {
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = "Reset stored app data?"
+        alert.informativeText = "This will remove persisted snapshots and the activity log from \(viewModel.storageRootPath). The app will stay open, but history and logs will be cleared until the next refresh."
+        alert.addButton(withTitle: "Reset Data")
+        alert.addButton(withTitle: "Cancel")
+
+        guard alert.runModal() == .alertFirstButtonReturn else {
+            return
+        }
+
+        do {
+            try viewModel.clearStoredData()
+            exportMessage = "Cleared persisted snapshots and activity log."
+        } catch {
+            exportMessage = "Failed to clear stored data: \(error.localizedDescription)"
+        }
+    }
+
+    private func exportFindings() {
+        guard let markdown = viewModel.markdownExport() else {
+            exportMessage = "No report is loaded yet."
+            return
+        }
+
+        let panel = NSSavePanel()
+        panel.canCreateDirectories = true
+        panel.allowedContentTypes = [.plainText]
+        panel.nameFieldStringValue = defaultExportFileName()
+        panel.title = "Export Findings"
+        panel.message = "Save a human-readable findings report for the current inventory snapshot."
+
+        if panel.runModal() == .OK, let url = panel.url {
+            do {
+                try markdown.write(to: url, atomically: true, encoding: .utf8)
+                exportMessage = "Saved findings report to \(url.path)."
+            } catch {
+                exportMessage = "Failed to save findings report: \(error.localizedDescription)"
+            }
+        }
+    }
+
+    private func exportScopeFindings(_ scope: DriveManagedScope) {
+        guard let markdown = viewModel.markdownExport(for: scope) else {
+            exportMessage = "No scope report is available for \(scope.displayName)."
+            return
+        }
+
+        let panel = NSSavePanel()
+        panel.canCreateDirectories = true
+        panel.allowedContentTypes = [.plainText]
+        panel.nameFieldStringValue = defaultScopeExportFileName(for: scope)
+        panel.title = "Export Scope Findings"
+        panel.message = "Save a human-readable findings report for the selected scope only."
+
+        if panel.runModal() == .OK, let url = panel.url {
+            do {
+                try markdown.write(to: url, atomically: true, encoding: .utf8)
+                exportMessage = "Saved scope findings report to \(url.path)."
+            } catch {
+                exportMessage = "Failed to save scope findings report: \(error.localizedDescription)"
+            }
+        }
+    }
+
+    private func defaultExportFileName() -> String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyy-MM-dd-HHmm"
+        return "google-drive-icon-guard-findings-\(formatter.string(from: Date())).md"
+    }
+
+    private func defaultScopeExportFileName(for scope: DriveManagedScope) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyy-MM-dd-HHmm"
+        let safeName = scope.displayName
+            .replacingOccurrences(of: "/", with: "-")
+            .replacingOccurrences(of: " ", with: "-")
+            .lowercased()
+        return "google-drive-icon-guard-\(safeName)-\(formatter.string(from: Date())).md"
+    }
+
+    private func exportDryRunScript(for scope: DriveManagedScope) {
+        let script = viewModel.dryRunRemediationScript(for: scope)
+
+        let panel = NSSavePanel()
+        panel.canCreateDirectories = true
+        panel.allowedContentTypes = [.shellScript]
+        panel.nameFieldStringValue = defaultDryRunFileName(for: scope)
+        panel.title = "Export Dry-Run Script"
+        panel.message = "Save a shell script that prints the candidate cleanup operations without removing files."
+
+        if panel.runModal() == .OK, let url = panel.url {
+            do {
+                try script.write(to: url, atomically: true, encoding: .utf8)
+                try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: url.path)
+                exportMessage = "Saved dry-run script to \(url.path)."
+            } catch {
+                exportMessage = "Failed to save dry-run script: \(error.localizedDescription)"
+            }
+        }
+    }
+
+    private func defaultDryRunFileName(for scope: DriveManagedScope) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyy-MM-dd-HHmm"
+        let safeName = scope.displayName
+            .replacingOccurrences(of: "/", with: "-")
+            .replacingOccurrences(of: " ", with: "-")
+            .lowercased()
+        return "google-drive-icon-guard-dry-run-\(safeName)-\(formatter.string(from: Date())).sh"
+    }
+
+    private func activityTitle(for event: EventRecord) -> String {
+        switch event.rawEventType {
+        case "inventory_refresh":
+            return "Inventory refresh completed"
+        case "scope_scan_result":
+            return URL(fileURLWithPath: event.targetPath).lastPathComponent
+        case let value where value.hasPrefix("scope_history_"):
+            return "Scope history updated"
+        default:
+            return event.rawEventType
+        }
+    }
+
+    private func activityDetail(for event: EventRecord) -> String {
+        switch event.rawEventType {
+        case "inventory_refresh":
+            return "Recorded \(event.aggregatedCount) total artefact match(es) in the latest refresh."
+        case "scope_scan_result":
+            return "Matched \(event.aggregatedCount) artefact(s) at \(event.targetPath)."
+        case let value where value.hasPrefix("scope_history_"):
+            return "Detected a scope-level history change at \(event.targetPath)."
+        default:
+            return "\(event.rawEventType) at \(event.targetPath)"
+        }
+    }
+
+    private func activityIcon(for event: EventRecord) -> String {
+        switch event.rawEventType {
+        case "inventory_refresh":
+            return "arrow.clockwise.circle"
+        case "scope_scan_result":
+            return "doc.text.magnifyingglass"
+        case let value where value.hasPrefix("scope_history_"):
+            return "clock.arrow.trianglehead.counterclockwise.rotate.90"
+        default:
+            return "text.justify.left"
+        }
+    }
+
+    private func activityTint(for event: EventRecord) -> Color {
+        switch event.rawEventType {
+        case "inventory_refresh":
+            return .blue
+        case "scope_scan_result":
+            return .red
+        case let value where value.hasPrefix("scope_history_"):
+            return .purple
+        default:
+            return .secondary
+        }
     }
 }

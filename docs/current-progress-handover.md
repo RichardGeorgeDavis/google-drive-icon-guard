@@ -1,6 +1,6 @@
 # Current Progress Handover
 
-This handover captures the **implemented state of the repository as of 2026-03-24**, not just the original product intent.
+This handover captures the **implemented state of the repository as of 2026-03-31**, not just the original product intent.
 
 ## Current state
 
@@ -14,6 +14,7 @@ The repo is now a standalone Git repository with:
 - persisted inventory snapshots written to `cache/scope-inventory/latest.json`
 - persisted inventory history written to `cache/scope-inventory/history/`
 - an app-only beta packaging script for an unsigned downloadable `.app`
+- a bundled standalone helper host executable for replay/test protection evaluation
 - a manual GitHub Actions workflow for building the beta app archive
 - a verified GitHub Actions beta packaging run on `main`
 - a saved GitHub Release draft for `v0.1.0-beta.1`
@@ -35,6 +36,8 @@ The current implementation can:
 - fall back to visible `~/Library/CloudStorage/GoogleDrive*` locations when needed
 - scan supported and audit-only scopes for `Icon\r` and `._*` hidden artefacts
 - capture per-scope artefact counts, sample paths, and total storage impact
+- show recent persisted snapshots plus current-versus-previous deltas in the viewer
+- package and run a standalone helper host against replayed process-attributed events
 - classify each discovered scope by:
   - drive mode
   - scope kind
@@ -72,10 +75,10 @@ These outputs are ignored by Git and intended as repo-local generated state.
 ## What is not implemented yet
 
 - the final polished SwiftUI app shell
-- the privileged helper/service boundary
-- enforcement or remediation behavior
+- the final installed helper/service boundary
+- real process-attributed event capture via macOS Endpoint Security
 - signed and notarized beta release packaging
-- helper/installer packaging in public beta downloads
+- installer packaging for public beta downloads
 
 ## Testing and toolchain note
 
@@ -85,7 +88,7 @@ Local testing can be misleading on machines that use only Apple Command Line Too
 
 ## Recommended next steps
 
-1. Surface per-scope artefact counts and storage impact more prominently in the viewer.
+1. Replace replay-only helper input with a real Endpoint Security event source and system-extension packaging.
 2. Decide when to sign and notarize public beta builds.
 3. Keep the original handover aligned with implementation milestones as the repo evolves.
 

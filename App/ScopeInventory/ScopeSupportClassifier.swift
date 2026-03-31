@@ -73,7 +73,16 @@ public struct ScopeSupportClassifier {
 
     public func applyingAssessment(to scope: DriveManagedScope) -> DriveManagedScope {
         var updatedScope = scope
-        updatedScope.supportStatus = assess(scope: scope).supportStatus
+        let assessment = assess(scope: scope)
+        updatedScope.supportStatus = assessment.supportStatus
+        switch assessment.supportStatus {
+        case .supported:
+            updatedScope.enforcementMode = .auditOnly
+        case .auditOnly:
+            updatedScope.enforcementMode = .auditOnly
+        case .unsupported:
+            updatedScope.enforcementMode = .off
+        }
         return updatedScope
     }
 }

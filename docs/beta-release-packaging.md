@@ -9,7 +9,8 @@ The current beta packaging target is:
 - an **unsigned** `.app` bundle
 - zipped as a downloadable archive
 - built from the `drive-icon-guard-viewer` SwiftUI target
-- app-only; no helper or installer is included in the current beta package
+- bundles a standalone `drive-icon-guard-helper` executable under `Contents/Helpers/`
+- does not yet install or register a real helper/service or system extension
 
 This is a practical first beta format, not the final release/distribution model.
 
@@ -21,6 +22,7 @@ This is a practical first beta format, not the final release/distribution model.
 - current packaging output:
   - `dist/Google Drive Icon Guard.app`
   - `dist/google-drive-icon-guard-beta-unsigned.zip`
+  - `dist/Google Drive Icon Guard.app/Contents/Helpers/drive-icon-guard-helper`
 
 ## Build the beta package locally
 
@@ -33,15 +35,17 @@ Use:
 What it does:
 
 - builds the release executable with Swift Package Manager
+- builds the standalone helper host executable with Swift Package Manager
 - creates a minimal macOS `.app` bundle
 - writes an `Info.plist`
-- copies `icon.png` into the bundle resources
+- converts `icon.png` into an `.icns` app icon bundle
+- places the helper host in `Contents/Helpers/`
 - creates a zip archive for distribution
 
 What it does **not** do yet:
 
-- package a privileged helper
-- register any installer or service component
+- install or register any helper/service component
+- ship a real Endpoint Security system extension
 - ship the final app + helper architecture described in the handover
 
 ## First beta install expectations

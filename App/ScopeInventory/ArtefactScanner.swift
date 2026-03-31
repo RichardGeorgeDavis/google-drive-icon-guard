@@ -56,11 +56,13 @@ public struct ArtefactScanner {
         var isDirectory: ObjCBool = false
         guard fileManager.fileExists(atPath: scope.path, isDirectory: &isDirectory), isDirectory.boolValue else {
             warnings.append(
-                DiscoveryWarning(
-                    code: "scope_scan_path_missing",
-                    message: "Audit scan skipped \(scope.displayName) because the scope path was not found or is not a directory: \(scope.path)"
+                    FileAccessGuidance.warning(
+                        operationCode: "scope_scan_path_missing",
+                        path: scope.path,
+                        error: NSError(domain: NSPOSIXErrorDomain, code: Int(ENOENT)),
+                        genericMessage: "Audit scan skipped \(scope.displayName) because the scope path was not found or is not a directory: \(scope.path)"
+                    )
                 )
-            )
 
             return (
                 ScopeArtefactScanResult(
@@ -74,21 +76,18 @@ public struct ArtefactScanner {
         }
 
         let rootURL = URL(fileURLWithPath: scope.path, isDirectory: true)
-        let resourceKeys: [URLResourceKey] = [
-            .isDirectoryKey,
-            .isRegularFileKey,
-            .isSymbolicLinkKey,
-            .fileSizeKey,
-            .nameKey
-        ]
-
+        var scannedDirectoryCount = 0
+        var inspectedFileCount = 0
+        var skippedSymbolicLinkCount = 0
         var matchedArtefactCount = 0
         var matchedBytes = 0
+        var artefactBuckets: [ArtefactType: (count: Int, bytes: Int)] = [:]
         var sampleMatches: [ArtefactSample] = []
 
         var directoriesToScan = [rootURL]
 
         while let directoryURL = directoriesToScan.popLast() {
+            scannedDirectoryCount += 1
             let entries: [URL]
             let entryNames: [String]
 
@@ -96,9 +95,11 @@ public struct ArtefactScanner {
                 entryNames = try directoryEntryNames(atPath: directoryURL.path)
             } catch {
                 warnings.append(
-                    DiscoveryWarning(
-                        code: "scope_scan_entry_unreadable",
-                        message: "Audit scan could not read \(directoryURL.path) while scanning \(scope.displayName): \(error.localizedDescription)"
+                    FileAccessGuidance.warning(
+                        operationCode: "scope_scan_entry_unreadable",
+                        path: directoryURL.path,
+                        error: error,
+                        genericMessage: "Audit scan could not read \(directoryURL.path) while scanning \(scope.displayName): \(error.localizedDescription)"
                     )
                 )
 
@@ -123,18 +124,21 @@ public struct ArtefactScanner {
                 let resourceValues: URLResourceValues
 
                 do {
-                    resourceValues = try entryURL.resourceValues(forKeys: Set(resourceKeys))
+                    resourceValues = try entryURL.resourceValues(forKeys: FileFootprint.resourceKeys)
                 } catch {
                     warnings.append(
-                        DiscoveryWarning(
-                            code: "scope_scan_resource_values_failed",
-                            message: "Audit scan could not read file metadata for \(entryURL.path): \(error.localizedDescription)"
+                        FileAccessGuidance.warning(
+                            operationCode: "scope_scan_resource_values_failed",
+                            path: entryURL.path,
+                            error: error,
+                            genericMessage: "Audit scan could not read file metadata for \(entryURL.path): \(error.localizedDescription)"
                         )
                     )
                     continue
                 }
 
                 if resourceValues.isSymbolicLink == true {
+                    skippedSymbolicLinkCount += 1
                     continue
                 }
 
@@ -147,14 +151,21 @@ public struct ArtefactScanner {
                     continue
                 }
 
+                inspectedFileCount += 1
+
                 let filename = resourceValues.name ?? entryURL.lastPathComponent
                 guard let rule = matchingRule(forFilename: filename, path: entryURL.path) else {
                     continue
                 }
 
-                let fileSize = resourceValues.fileSize ?? 0
+                let fileSize = FileFootprint.bytes(for: resourceValues)
                 matchedArtefactCount += 1
                 matchedBytes += fileSize
+                let existingBucket = artefactBuckets[rule.artefactType] ?? (0, 0)
+                artefactBuckets[rule.artefactType] = (
+                    count: existingBucket.count + 1,
+                    bytes: existingBucket.bytes + fileSize
+                )
 
                 if sampleMatches.count < maxSamplesPerScope {
                     sampleMatches.append(
@@ -176,8 +187,21 @@ public struct ArtefactScanner {
                 scopeDisplayName: scope.displayName,
                 scopePath: scope.path,
                 scanStatus: .scanned,
+                scannedDirectoryCount: scannedDirectoryCount,
+                inspectedFileCount: inspectedFileCount,
+                skippedSymbolicLinkCount: skippedSymbolicLinkCount,
                 matchedArtefactCount: matchedArtefactCount,
                 matchedBytes: matchedBytes,
+                artefactSummaries: artefactBuckets
+                    .map { key, value in
+                        ArtefactTypeSummary(artefactType: key, count: value.count, totalBytes: value.bytes)
+                    }
+                    .sorted { lhs, rhs in
+                        if lhs.count != rhs.count {
+                            return lhs.count > rhs.count
+                        }
+                        return lhs.artefactType.rawValue < rhs.artefactType.rawValue
+                    },
                 sampleMatches: sampleMatches
             ),
             warnings

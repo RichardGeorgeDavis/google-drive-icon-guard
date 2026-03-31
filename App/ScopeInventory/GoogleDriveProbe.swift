@@ -34,10 +34,11 @@ public struct GoogleDriveProbe {
         let hasConfiguredMyDrive = scopes.contains(where: { $0.scopeKind == .myDrive })
 
         if !hasConfiguredMyDrive {
-            let inferredStreamScopes = discoverStreamScopes()
-            scopes.append(contentsOf: inferredStreamScopes)
+            let inferredStreamScopesResult = discoverStreamScopes()
+            scopes.append(contentsOf: inferredStreamScopesResult.scopes)
+            warnings.append(contentsOf: inferredStreamScopesResult.warnings)
 
-            if inferredStreamScopes.isEmpty {
+            if inferredStreamScopesResult.scopes.isEmpty {
                 warnings.append(
                     DiscoveryWarning(
                         code: "no_visible_stream_scopes",
@@ -144,23 +145,25 @@ public struct GoogleDriveProbe {
 
             return (scopes, warnings)
         } catch {
+            let warning = FileAccessGuidance.warning(
+                operationCode: "root_preference_read_failed",
+                path: databasePath,
+                error: error,
+                genericMessage: "DriveFS root preference parsing failed: \(error.localizedDescription)"
+            )
+
             return (
                 [],
-                [
-                    DiscoveryWarning(
-                        code: "root_preference_read_failed",
-                        message: "DriveFS root preference parsing failed: \(error.localizedDescription)"
-                    )
-                ]
+                [warning]
             )
         }
     }
 
-    private func discoverStreamScopes() -> [DriveManagedScope] {
+    private func discoverStreamScopes() -> (scopes: [DriveManagedScope], warnings: [DiscoveryWarning]) {
         let cloudStoragePath = NSString(string: "~/Library/CloudStorage").expandingTildeInPath
 
         guard fileManager.fileExists(atPath: cloudStoragePath) else {
-            return []
+            return ([], [])
         }
 
         let entries: [String]
@@ -168,10 +171,20 @@ public struct GoogleDriveProbe {
         do {
             entries = try fileManager.contentsOfDirectory(atPath: cloudStoragePath)
         } catch {
-            return []
+            return (
+                [],
+                [
+                    FileAccessGuidance.warning(
+                        operationCode: "cloud_storage_discovery_failed",
+                        path: cloudStoragePath,
+                        error: error,
+                        genericMessage: "Google Drive stream scope discovery failed in \(cloudStoragePath): \(error.localizedDescription)"
+                    )
+                ]
+            )
         }
 
-        return entries
+        let scopes = entries
             .filter { $0.lowercased().hasPrefix("googledrive") }
             .map { entryName in
                 let scopePath = (cloudStoragePath as NSString).appendingPathComponent(entryName)
@@ -189,5 +202,7 @@ public struct GoogleDriveProbe {
 
                 return supportClassifier.applyingAssessment(to: scope)
             }
+
+        return (scopes, [])
     }
 }

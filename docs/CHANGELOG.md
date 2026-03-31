@@ -1,5 +1,17 @@
 # Changelog
 
+## 2026-03-31
+
+### Implemented
+
+- packaged a standalone `drive-icon-guard-helper` executable with the beta app bundle
+- added replay/test helper event loading for process-attributed event evaluation
+- surfaced helper host availability and Endpoint Security readiness more explicitly in the app UI
+
+### Documentation
+
+- updated beta packaging and current-progress docs to reflect the bundled helper host and remaining Endpoint Security blocker
+
 ## 2026-03-27
 
 ### Implemented
@@ -7,10 +19,12 @@
 - audit-only hidden artefact scanning across supported and audit-only scopes
 - per-scope artefact summaries with match counts, storage impact, and sample paths
 - viewer updates to surface scan status and artefact impact alongside discovered scopes
+- recent snapshot history browsing and current-versus-previous delta summaries in the viewer
 
 ### Testing
 
 - added scanner coverage for hidden artefact detection, unsupported-scope skips, and missing-scope warnings
+- added persistence coverage for history loading and snapshot comparison deltas
 
 ## 2026-03-24
 

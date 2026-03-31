@@ -70,6 +70,26 @@ func rejectsUnknownFilesystemScopes() {
 
     #expect(classifier.assess(scope: scope).supportStatus == .unsupported)
 }
+
+@Test
+func keepsSupportedScopesAuditOnlyUntilProcessAwareProtectionExists() {
+    let classifier = ScopeSupportClassifier()
+    let scope = DriveManagedScope(
+        displayName: "Protected Mirror",
+        path: "/Volumes/Work/Google Drive",
+        scopeKind: .myDrive,
+        driveMode: .mirror,
+        source: .config,
+        volumeKind: .external,
+        fileSystemKind: .apfs,
+        supportStatus: .auditOnly
+    )
+
+    let updated = classifier.applyingAssessment(to: scope)
+
+    #expect(updated.supportStatus == .supported)
+    #expect(updated.enforcementMode == .auditOnly)
+}
 #elseif canImport(XCTest)
 import DriveIconGuardScopeInventory
 import DriveIconGuardShared
@@ -138,6 +158,25 @@ final class ScopeSupportClassifierTests: XCTestCase {
         )
 
         XCTAssertEqual(classifier.assess(scope: scope).supportStatus, .unsupported)
+    }
+
+    func testKeepsSupportedScopesAuditOnlyUntilProcessAwareProtectionExists() {
+        let classifier = ScopeSupportClassifier()
+        let scope = DriveManagedScope(
+            displayName: "Protected Mirror",
+            path: "/Volumes/Work/Google Drive",
+            scopeKind: .myDrive,
+            driveMode: .mirror,
+            source: .config,
+            volumeKind: .external,
+            fileSystemKind: .apfs,
+            supportStatus: .auditOnly
+        )
+
+        let updated = classifier.applyingAssessment(to: scope)
+
+        XCTAssertEqual(updated.supportStatus, .supported)
+        XCTAssertEqual(updated.enforcementMode, .auditOnly)
     }
 }
 #endif

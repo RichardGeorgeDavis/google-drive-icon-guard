@@ -13,8 +13,20 @@ let package = Package(
             targets: ["DriveIconGuardShared"]
         ),
         .library(
+            name: "DriveIconGuardIPC",
+            targets: ["DriveIconGuardIPC"]
+        ),
+        .library(
             name: "DriveIconGuardScopeInventory",
             targets: ["DriveIconGuardScopeInventory"]
+        ),
+        .library(
+            name: "DriveIconGuardXPCClient",
+            targets: ["DriveIconGuardXPCClient"]
+        ),
+        .library(
+            name: "DriveIconGuardHelper",
+            targets: ["DriveIconGuardHelper"]
         ),
         .executable(
             name: "drive-icon-guard-scope-inventory",
@@ -23,6 +35,10 @@ let package = Package(
         .executable(
             name: "drive-icon-guard-viewer",
             targets: ["DriveIconGuardViewer"]
+        ),
+        .executable(
+            name: "drive-icon-guard-helper",
+            targets: ["DriveIconGuardHelperCLI"]
         )
     ],
     targets: [
@@ -33,11 +49,45 @@ let package = Package(
             sources: ["Models", "Utilities"]
         ),
         .target(
+            name: "DriveIconGuardIPC",
+            dependencies: ["DriveIconGuardShared"],
+            path: "Shared/IPC",
+            exclude: ["README.md"]
+        ),
+        .target(
             name: "DriveIconGuardScopeInventory",
             dependencies: ["DriveIconGuardShared"],
             path: "App",
             exclude: ["UI", "Logs", "Settings", "XPCClient"],
             sources: ["ScopeInventory"]
+        ),
+        .target(
+            name: "DriveIconGuardXPCClient",
+            dependencies: [
+                "DriveIconGuardShared",
+                "DriveIconGuardIPC",
+                "DriveIconGuardScopeInventory"
+            ],
+            path: "App/XPCClient",
+            exclude: ["README.md"]
+        ),
+        .target(
+            name: "DriveIconGuardHelper",
+            dependencies: [
+                "DriveIconGuardShared",
+                "DriveIconGuardIPC",
+                "DriveIconGuardScopeInventory"
+            ],
+            path: "Helper",
+            exclude: ["README.md"],
+            sources: [
+                "ArtefactClassifier",
+                "Audit",
+                "CircuitBreaker",
+                "EventSubscription",
+                "PolicyEngine",
+                "ProcessClassifier"
+            ]
         ),
         .executableTarget(
             name: "DriveIconGuardScopeInventoryCLI",
@@ -51,10 +101,22 @@ let package = Package(
             name: "DriveIconGuardViewer",
             dependencies: [
                 "DriveIconGuardShared",
-                "DriveIconGuardScopeInventory"
+                "DriveIconGuardScopeInventory",
+                "DriveIconGuardIPC",
+                "DriveIconGuardXPCClient"
             ],
             path: "App/UI",
             exclude: ["README.md"]
+        ),
+        .executableTarget(
+            name: "DriveIconGuardHelperCLI",
+            dependencies: [
+                "DriveIconGuardShared",
+                "DriveIconGuardIPC",
+                "DriveIconGuardScopeInventory",
+                "DriveIconGuardHelper"
+            ],
+            path: "Tools/ProtectionHelperCLI"
         ),
         .testTarget(
             name: "DriveIconGuardScopeInventoryTests",
@@ -63,6 +125,16 @@ let package = Package(
                 "DriveIconGuardScopeInventory"
             ],
             path: "Tests/DriveIconGuardScopeInventoryTests"
+        ),
+        .testTarget(
+            name: "DriveIconGuardHelperTests",
+            dependencies: [
+                "DriveIconGuardShared",
+                "DriveIconGuardIPC",
+                "DriveIconGuardScopeInventory",
+                "DriveIconGuardHelper"
+            ],
+            path: "Tests/DriveIconGuardHelperTests"
         )
     ]
 )

@@ -24,6 +24,7 @@ The current Swift scaffold intentionally implements conservative discovery plus 
 - capture per-scope match counts, storage impact, and sample matched paths
 - persist the latest inventory snapshot to `cache/scope-inventory/latest.json`
 - persist timestamped inventory history under `cache/scope-inventory/history/`
+- show recent snapshots and current-versus-previous deltas in the viewer
 - expose a minimal SwiftUI viewer for the discovered inventory
 
 It now covers mirror and backup roots when they are present in DriveFS root preferences and can confirm configured roots from per-account DriveFS account data. It does **not** yet parse broader non-root account state beyond those current confirmation paths.
@@ -33,8 +34,8 @@ It now covers mirror and backup roots when they are present in DriveFS root pref
 1. Parse deeper Google Drive state under `~/Library/Application Support/Google/DriveFS` and related roots.
 2. Resolve any remaining account-specific settings not represented in the current root confirmation paths.
 3. Confirm custom backup scopes and one-shot states from config/state beyond the current root databases.
-4. Expand the viewer so artefact counts, bytes, scan status, and history are easier to review.
-5. Add historical comparison views before any remediation or enforcement work.
+4. Keep refining the viewer so artefact counts, bytes, scan status, and history deltas are easier to review.
+5. Deepen historical comparison beyond the current top-line delta summary before any remediation or enforcement work.
 
 ## Acceptance mapping
 
@@ -47,3 +48,4 @@ Current scaffold status against the handover:
 - `classifies volume kind and filesystem kind`: implemented conservatively
 - `marks each scope as supported / auditOnly / unsupported`: implemented
 - `scans discovered scopes for hidden icon artefacts in audit-only mode`: implemented
+- `shows recent snapshot history and basic comparison in the viewer`: implemented

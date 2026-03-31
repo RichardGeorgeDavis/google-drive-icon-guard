@@ -32,7 +32,7 @@ Planned components:
 - a helper/service boundary for later narrow, process-aware protection work
 - installer/setup flow for registering that helper only when the project reaches that stage
 
-The current public beta does **not** ship the helper or installer. Current releases are app-only while discovery, classification, and audit workflows are still being validated.
+The current public beta now bundles a standalone helper host binary for development and replay testing, but it still does **not** ship the final installed helper/service or installer flow. Live Google-Drive-only blocking remains pending real macOS process-attributed events.
 
 ## Beta Release Format
 
@@ -43,7 +43,8 @@ Current beta packaging:
 - unsigned `.app` bundle
 - zipped beta archive for download
 - built from the current SwiftUI app shell
-- app-only until helper implementation and installation flow exist
+- bundles the viewer plus a standalone helper host binary
+- still no installed helper/service or installer flow
 
 Build it locally with:
 
@@ -76,9 +77,11 @@ Right now the codebase can:
 - report per-scope match counts, sample paths, and total storage impact
 - persist the latest scope snapshot to `cache/scope-inventory/latest.json`
 - keep timestamped history snapshots under `cache/scope-inventory/history/`
+- show recent snapshots and current-versus-previous history deltas in the viewer
+- package a standalone helper host for replay/test protection evaluation
 - open a lightweight SwiftUI app shell for discovered scopes via `swift run drive-icon-guard-viewer`
 
-It does **not** yet ship the final full app shell, privileged helper, or end-user remediation flow.
+It does **not** yet ship the final installed helper, real Endpoint Security event source, or the final Google-Drive-only blocking path.
 
 ## Quick Start
 
@@ -86,6 +89,7 @@ It does **not** yet ship the final full app shell, privileged helper, or end-use
 swift build
 swift run drive-icon-guard-scope-inventory
 swift run drive-icon-guard-viewer
+swift run drive-icon-guard-helper --help
 swift test
 ```
 
@@ -146,8 +150,9 @@ google-drive-icon-guard/
 │   └── Utilities/
 ├── Installer/
 ├── Tools/
+│   ├── ProtectionHelperCLI/
 │   └── ScopeInventoryCLI/
 └── Tests/
 ```
 
-The current implementation keeps the project honest: inventory first, audit visibility next, enforcement later.
+The current implementation keeps the project honest: inventory first, audit visibility next, helper host scaffolding now, and true Google-Drive-only blocking only after Endpoint Security integration.
