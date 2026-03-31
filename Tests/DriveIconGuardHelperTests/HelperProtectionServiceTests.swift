@@ -79,6 +79,16 @@ func helperProtectionServiceAllowsEventsOutsideProtectedScopes() {
 
     #expect(evaluation.decision == .allow)
 }
+
+@Test
+func helperProtectionServiceExposesSubscriberRuntimeStatus() {
+    let service = HelperProtectionService(subscriber: UnavailableProcessAttributedEventSubscriber())
+
+    let status = service.runtimeStatus()
+
+    #expect(status.state == .unavailable)
+    #expect(status.detail.contains("No process-attributed event source"))
+}
 #elseif canImport(XCTest)
 import DriveIconGuardHelper
 import DriveIconGuardIPC
@@ -158,6 +168,15 @@ final class HelperProtectionServiceTests: XCTestCase {
         )
 
         XCTAssertEqual(evaluation.decision, .allow)
+    }
+
+    func testHelperProtectionServiceExposesSubscriberRuntimeStatus() {
+        let service = HelperProtectionService(subscriber: UnavailableProcessAttributedEventSubscriber())
+
+        let status = service.runtimeStatus()
+
+        XCTAssertEqual(status.state, .unavailable)
+        XCTAssertTrue(status.detail.contains("No process-attributed event source"))
     }
 }
 #endif

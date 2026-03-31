@@ -1,3 +1,4 @@
+import DriveIconGuardIPC
 import DriveIconGuardScopeInventory
 import DriveIconGuardShared
 import AppKit
@@ -1001,11 +1002,17 @@ struct ScopeInventoryWindow: View {
             HStack(spacing: 10) {
                 badge(liveProtectionActive ? "active" : "audit only", tint: liveProtectionActive ? .green : .orange)
                 metadataLabel("Auto-Blocked Scopes", value: "\(viewModel.protectionStatus.activeProtectedScopeCount)")
+                badge(eventSourceStateLabel(viewModel.protectionStatus.eventSourceState), tint: eventSourceStateColor(viewModel.protectionStatus.eventSourceState))
+                badge(installationStateLabel(viewModel.protectionStatus.installationState), tint: installationStateColor(viewModel.protectionStatus.installationState))
             }
             .font(.caption)
             .foregroundStyle(.secondary)
 
             Text(viewModel.protectionStatus.eventSourceDescription)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            Text(viewModel.protectionStatus.installationDescription)
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
@@ -1213,6 +1220,66 @@ struct ScopeInventoryWindow: View {
             return .blue
         default:
             return .secondary
+        }
+    }
+
+    private func eventSourceStateLabel(_ state: ProtectionEventSourceState) -> String {
+        switch state {
+        case .unavailable:
+            return "unavailable"
+        case .bundled:
+            return "bundled"
+        case .needsApproval:
+            return "needs approval"
+        case .ready:
+            return "ready"
+        case .error:
+            return "error"
+        }
+    }
+
+    private func eventSourceStateColor(_ state: ProtectionEventSourceState) -> Color {
+        switch state {
+        case .unavailable:
+            return .secondary
+        case .bundled:
+            return .blue
+        case .needsApproval:
+            return .orange
+        case .ready:
+            return .green
+        case .error:
+            return .red
+        }
+    }
+
+    private func installationStateLabel(_ state: ProtectionInstallationState) -> String {
+        switch state {
+        case .unavailable:
+            return "no install path"
+        case .bundledOnly:
+            return "bundled only"
+        case .installPlanReady:
+            return "install plan ready"
+        case .installed:
+            return "installed"
+        case .error:
+            return "install error"
+        }
+    }
+
+    private func installationStateColor(_ state: ProtectionInstallationState) -> Color {
+        switch state {
+        case .unavailable:
+            return .secondary
+        case .bundledOnly:
+            return .blue
+        case .installPlanReady:
+            return .orange
+        case .installed:
+            return .green
+        case .error:
+            return .red
         }
     }
 

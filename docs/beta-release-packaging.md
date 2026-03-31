@@ -10,6 +10,7 @@ The current beta packaging target is:
 - zipped as a downloadable archive
 - built from the `drive-icon-guard-viewer` SwiftUI target
 - bundles a standalone `drive-icon-guard-helper` executable under `Contents/Helpers/`
+- packages installer scaffold resources under `Contents/Resources/Installer/`
 - does not yet install or register a real helper/service or system extension
 
 This is a practical first beta format, not the final release/distribution model.
@@ -23,6 +24,7 @@ This is a practical first beta format, not the final release/distribution model.
   - `dist/Google Drive Icon Guard.app`
   - `dist/google-drive-icon-guard-beta-unsigned.zip`
   - `dist/Google Drive Icon Guard.app/Contents/Helpers/drive-icon-guard-helper`
+  - `dist/Google Drive Icon Guard.app/Contents/Resources/Installer/ServiceRegistration/`
 
 ## Build the beta package locally
 
@@ -40,6 +42,7 @@ What it does:
 - writes an `Info.plist`
 - converts `icon.png` into an `.icns` app icon bundle
 - places the helper host in `Contents/Helpers/`
+- copies installer scaffold resources into `Contents/Resources/Installer/`
 - creates a zip archive for distribution
 
 What it does **not** do yet:

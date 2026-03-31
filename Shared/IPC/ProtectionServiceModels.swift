@@ -8,6 +8,48 @@ public enum ProtectionServiceMode: String, Codable, Equatable, Sendable {
     case helperRequired
 }
 
+public enum ProtectionEventSourceState: String, Codable, Equatable, Sendable {
+    case unavailable
+    case bundled
+    case needsApproval
+    case ready
+    case error
+}
+
+public enum ProtectionInstallationState: String, Codable, Equatable, Sendable {
+    case unavailable
+    case bundledOnly
+    case installPlanReady
+    case installed
+    case error
+}
+
+public struct ProtectionInstallationStatus: Codable, Equatable, Sendable {
+    public var state: ProtectionInstallationState
+    public var detail: String
+
+    public init(
+        state: ProtectionInstallationState,
+        detail: String
+    ) {
+        self.state = state
+        self.detail = detail
+    }
+}
+
+public struct ProtectionEventSourceStatus: Codable, Equatable, Sendable {
+    public var state: ProtectionEventSourceState
+    public var detail: String
+
+    public init(
+        state: ProtectionEventSourceState,
+        detail: String
+    ) {
+        self.state = state
+        self.detail = detail
+    }
+}
+
 public struct ProtectionServiceConfiguration: Codable, Equatable, Sendable {
     public var liveProtectionEnabled: Bool
     public var scopes: [DriveManagedScope]
@@ -26,20 +68,29 @@ public struct ProtectionServiceStatusSnapshot: Codable, Equatable, Sendable {
     public var activeProtectedScopeCount: Int
     public var detail: String
     public var helperExecutablePath: String?
+    public var eventSourceState: ProtectionEventSourceState
     public var eventSourceDescription: String
+    public var installationState: ProtectionInstallationState
+    public var installationDescription: String
 
     public init(
         mode: ProtectionServiceMode,
         activeProtectedScopeCount: Int,
         detail: String,
         helperExecutablePath: String? = nil,
-        eventSourceDescription: String = "No process-attributed helper event source is active."
+        eventSourceState: ProtectionEventSourceState = .unavailable,
+        eventSourceDescription: String = "No process-attributed helper event source is active.",
+        installationState: ProtectionInstallationState = .unavailable,
+        installationDescription: String = "No helper installation resources are available."
     ) {
         self.mode = mode
         self.activeProtectedScopeCount = activeProtectedScopeCount
         self.detail = detail
         self.helperExecutablePath = helperExecutablePath
+        self.eventSourceState = eventSourceState
         self.eventSourceDescription = eventSourceDescription
+        self.installationState = installationState
+        self.installationDescription = installationDescription
     }
 }
 

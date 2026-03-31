@@ -9,6 +9,7 @@ private struct HelperHostOptions {
     var snapshotPath: String?
     var useFreshScan = false
     var emitJSON = false
+    var showStatus = false
     var showHelp = false
 }
 
@@ -34,6 +35,13 @@ struct DriveIconGuardHelperCLI {
 
             if options.showHelp {
                 printUsage()
+                return
+            }
+
+            if options.showStatus {
+                let eventSourceStatus = EndpointSecurityProcessAttributedEventSubscriber().status
+                let installationStatus = currentInstallationStatus()
+                print(render(eventSourceStatus: eventSourceStatus, installationStatus: installationStatus, emitJSON: options.emitJSON))
                 return
             }
 
@@ -84,6 +92,8 @@ struct DriveIconGuardHelperCLI {
                 options.useFreshScan = true
             case "--json":
                 options.emitJSON = true
+            case "--status":
+                options.showStatus = true
             case "--help", "-h":
                 options.showHelp = true
             default:
@@ -125,14 +135,68 @@ struct DriveIconGuardHelperCLI {
         return "[\(evaluation.decision.rawValue)] scope=\(scopeID) artefact=\(artefact) path=\(evaluation.event.targetPath) reason=\(evaluation.reason)"
     }
 
+    private static func render(
+        eventSourceStatus: ProtectionEventSourceStatus,
+        installationStatus: ProtectionInstallationStatus,
+        emitJSON: Bool
+    ) -> String {
+        if emitJSON {
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.sortedKeys]
+            let payload = HelperStatusPayload(
+                eventSourceStatus: eventSourceStatus,
+                installationStatus: installationStatus
+            )
+            guard let data = try? encoder.encode(payload),
+                  let string = String(data: data, encoding: .utf8) else {
+                return "{\"eventSourceState\":\"\(eventSourceStatus.state.rawValue)\",\"installationState\":\"\(installationStatus.state.rawValue)\"}"
+            }
+            return string
+        }
+
+        return "[event:\(eventSourceStatus.state.rawValue)] \(eventSourceStatus.detail)\n[install:\(installationStatus.state.rawValue)] \(installationStatus.detail)"
+    }
+
+    private static func currentInstallationStatus() -> ProtectionInstallationStatus {
+        if let resourceURL = installerResourceURL() {
+            return ProtectionInstallationStatus(
+                state: .installPlanReady,
+                detail: "Installation scaffold resources are present at \(resourceURL.path), but real registration is not implemented yet."
+            )
+        }
+
+        return ProtectionInstallationStatus(
+            state: .bundledOnly,
+            detail: "No packaged installation scaffold resources were found next to this helper executable."
+        )
+    }
+
+    private static func installerResourceURL() -> URL? {
+        let bundleRoot = Bundle.main.bundleURL
+        let bundledURL = bundleRoot.appendingPathComponent("Contents/Resources/Installer/ServiceRegistration", isDirectory: true)
+        if FileManager.default.fileExists(atPath: bundledURL.path) {
+            return bundledURL
+        }
+
+        let repoURL = URL(fileURLWithPath: FileManager.default.currentDirectoryPath, isDirectory: true)
+            .appendingPathComponent("Installer/ServiceRegistration", isDirectory: true)
+        if FileManager.default.fileExists(atPath: repoURL.path) {
+            return repoURL
+        }
+
+        return nil
+    }
+
     private static func printUsage(to stream: UnsafeMutablePointer<FILE> = stdout) {
         fputs(
             """
             Usage: drive-icon-guard-helper --events <path> [--snapshot <report.json> | --fresh-scan] [--json]
+                   drive-icon-guard-helper --status [--json]
 
               --events <path>    JSON array or JSONL file containing ProcessAttributedFileEvent records.
               --snapshot <path>  Persisted inventory snapshot to use for scope evaluation.
               --fresh-scan       Generate a new inventory report instead of loading a snapshot.
+              --status           Show the current Endpoint Security subscriber readiness state.
               --json             Emit JSON evaluations instead of human-readable lines.
               --help             Show this message.
 
@@ -144,4 +208,9 @@ struct DriveIconGuardHelperCLI {
             stream
         )
     }
+}
+
+private struct HelperStatusPayload: Codable {
+    var eventSourceStatus: ProtectionEventSourceStatus
+    var installationStatus: ProtectionInstallationStatus
 }

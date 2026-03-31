@@ -5,12 +5,14 @@ This guide covers the **current beta/development state** of Google Drive Icon Gu
 Right now the repo provides:
 
 - a scope discovery CLI
-- a lightweight SwiftUI app shell with an inventory view
+- a SwiftUI review app with dashboard, history, logs, and settings
 - persisted inventory snapshots under `cache/scope-inventory/latest.json`
 - timestamped history snapshots under `cache/scope-inventory/history/`
-- an app-only beta packaging script for local `.app` and zip creation
+- a standalone helper host binary
+- installer scaffold resources for the future helper/system-extension registration flow
+- a beta packaging script for local `.app` and zip creation
 
-It does **not** yet install a privileged helper or ship the final helper-backed downloadable app flow.
+It does **not** yet install a privileged helper, register a system extension, or ship the final helper-backed downloadable app flow.
 
 ## First run
 
@@ -47,6 +49,12 @@ Run the minimal viewer:
 swift run drive-icon-guard-viewer
 ```
 
+Check helper readiness:
+
+```bash
+swift run drive-icon-guard-helper --status
+```
+
 Run tests:
 
 ```bash
@@ -58,14 +66,15 @@ swift test
 - the CLI should print a JSON inventory report
 - the CLI should persist the latest snapshot to `cache/scope-inventory/latest.json`
 - the CLI should also write a timestamped history snapshot under `cache/scope-inventory/history/`
-- the viewer should load discovered scopes, warnings, and the persisted path
+- the viewer should load discovered scopes, warnings, persisted history, and helper readiness state
 - the current implementation should discover configured DriveFS roots when available
+- the helper status should report `needsApproval` or `unavailable`, not active blocking
 
 ## Current permissions
 
-At the current Milestone 1 stage, the repo should not require special macOS privacy permissions just to run the discovery CLI or viewer.
+At the current beta stage, the repo should not require special macOS privacy permissions just to run the discovery CLI, viewer, or helper `--status` check.
 
-The current code reads Google Drive state from the user account’s DriveFS data and presents the resulting inventory. That is different from the later helper/enforcement work, which is not implemented yet.
+The current code reads Google Drive state from the user account’s DriveFS data and presents the resulting inventory. The helper/install boundary is scaffolded, but real live Endpoint Security monitoring and helper registration are not implemented yet.
 
 ## Troubleshooting
 
@@ -121,6 +130,22 @@ Check:
 - whether the report includes warnings that explain reduced discovery coverage
 
 The viewer reflects the same underlying discovery service used by the CLI.
+
+### Live protection still says `audit only`
+
+That is expected in the current build.
+
+The helper host and install scaffold are packaged, but live Google-Drive-only blocking still needs:
+
+- a real Endpoint Security event source
+- Apple-granted entitlements
+- a working helper/system-extension registration flow
+
+Useful command:
+
+```bash
+swift run drive-icon-guard-helper --status
+```
 
 ### The persisted snapshot looks stale
 

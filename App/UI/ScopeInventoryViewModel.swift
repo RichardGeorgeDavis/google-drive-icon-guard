@@ -16,7 +16,10 @@ final class ScopeInventoryViewModel: ObservableObject {
         mode: .inactive,
         activeProtectedScopeCount: 0,
         detail: "Automatic blocking remains in audit mode until a process-aware helper with Endpoint Security events is available.",
-        eventSourceDescription: "Current helper support is limited to replay/test scaffolding. Live Google-Drive-only blocking still requires a macOS Endpoint Security event source."
+        eventSourceState: .unavailable,
+        eventSourceDescription: "Current helper support is limited to replay/test scaffolding. Live Google-Drive-only blocking still requires a macOS Endpoint Security event source.",
+        installationState: .unavailable,
+        installationDescription: "No helper installation resources are available in this build."
     )
     @Published private(set) var remediationPreview: ScopeRemediationPreview?
     @Published private(set) var remediationApplyResult: ScopeRemediationApplyResult?

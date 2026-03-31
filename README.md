@@ -4,7 +4,7 @@
 
 Google Drive Icon Guard is a macOS utility aimed at stopping Google Drive from generating invisible icon files across synced locations.
 
-The current beta does that conservatively for now: it discovers Google Drive-managed locations, scans those scopes in audit-only mode for hidden icon artefacts, and builds the safety model needed before stronger prevention or cleanup is introduced.
+The current beta does that conservatively for now: it discovers Google Drive-managed locations, scans those scopes in audit-only mode for hidden icon artefacts, and includes the first helper/runtime scaffolding needed before narrow prevention can be turned on safely.
 
 This repository is currently in active development and should be treated as **beta**. The current codebase is still in the inventory and audit stage, not the final app release stage.
 
@@ -32,7 +32,7 @@ Planned components:
 - a helper/service boundary for later narrow, process-aware protection work
 - installer/setup flow for registering that helper only when the project reaches that stage
 
-The current public beta now bundles a standalone helper host binary for development and replay testing, but it still does **not** ship the final installed helper/service or installer flow. Live Google-Drive-only blocking remains pending real macOS process-attributed events.
+The current public beta now bundles a standalone helper host binary plus installer scaffold resources, but it still does **not** ship the final installed helper/service or system-extension registration flow. Live Google-Drive-only blocking remains pending real macOS process-attributed events.
 
 ## Beta Release Format
 
@@ -44,7 +44,8 @@ Current beta packaging:
 - zipped beta archive for download
 - built from the current SwiftUI app shell
 - bundles the viewer plus a standalone helper host binary
-- still no installed helper/service or installer flow
+- packages helper install-plan scaffold resources
+- still no real installed helper/service or system-extension registration flow
 
 Build it locally with:
 
@@ -64,7 +65,7 @@ This app was built to tackle that problem. On my own Mac, those hidden artefacts
 
 ## Current Development Status
 
-The repo is currently centered on **Milestone 1: scope discovery**.
+The repo is currently centered on **inventory, review, and helper scaffolding**, with live Google-Drive-only blocking still gated behind OS-specific integration.
 
 Right now the codebase can:
 
@@ -79,9 +80,11 @@ Right now the codebase can:
 - keep timestamped history snapshots under `cache/scope-inventory/history/`
 - show recent snapshots and current-versus-previous history deltas in the viewer
 - package a standalone helper host for replay/test protection evaluation
+- expose helper runtime/install readiness in the app and helper CLI
+- package installer scaffold resources so the build can report `installPlanReady`
 - open a lightweight SwiftUI app shell for discovered scopes via `swift run drive-icon-guard-viewer`
 
-It does **not** yet ship the final installed helper, real Endpoint Security event source, or the final Google-Drive-only blocking path.
+It does **not** yet ship a real installed helper, live Endpoint Security event source, or the final Google-Drive-only blocking path.
 
 ## Quick Start
 
@@ -89,6 +92,7 @@ It does **not** yet ship the final installed helper, real Endpoint Security even
 swift build
 swift run drive-icon-guard-scope-inventory
 swift run drive-icon-guard-viewer
+swift run drive-icon-guard-helper --status
 swift run drive-icon-guard-helper --help
 swift test
 ```
@@ -155,4 +159,4 @@ google-drive-icon-guard/
 └── Tests/
 ```
 
-The current implementation keeps the project honest: inventory first, audit visibility next, helper host scaffolding now, and true Google-Drive-only blocking only after Endpoint Security integration.
+The current implementation keeps the project honest: inventory first, audit visibility next, helper host plus install scaffolding now, and true Google-Drive-only blocking only after Endpoint Security integration and a real install/runtime path.

@@ -1,5 +1,18 @@
 # Changelog
 
+## 2026-04-01
+
+### Implemented
+
+- surfaced helper install/runtime readiness in the app alongside Endpoint Security readiness
+- added installer scaffold detection and bundled those resources into the packaged beta app
+- extended the packaged helper `--status` output to report both event-source and install-plan state
+
+### Documentation
+
+- refreshed public-facing docs to remove stale app-only and Milestone 1 wording
+- updated first-run guidance and launch checklist for the bundled helper plus install scaffold state
+
 ## 2026-03-31
 
 ### Implemented
@@ -7,6 +20,8 @@
 - packaged a standalone `drive-icon-guard-helper` executable with the beta app bundle
 - added replay/test helper event loading for process-attributed event evaluation
 - surfaced helper host availability and Endpoint Security readiness more explicitly in the app UI
+- added an `EndpointSecurityProcessAttributedEventSubscriber` skeleton and helper/runtime status reporting for the next enforcement phase
+- packaged installer scaffold resources so the app and helper can report `installPlanReady` without claiming real registration support
 
 ### Documentation
 

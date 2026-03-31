@@ -2,6 +2,11 @@ import Foundation
 import DriveIconGuardIPC
 
 public final class ReplayProcessAttributedEventSubscriber: ProcessAttributedEventSubscriber, @unchecked Sendable {
+    public private(set) var status = ProtectionEventSourceStatus(
+        state: .ready,
+        detail: "Replay/test event input is ready. This path is only for local validation and does not represent live Endpoint Security monitoring."
+    )
+
     private let events: [ProcessAttributedFileEvent]
     private let queue: DispatchQueue
     private let completionGroup = DispatchGroup()
@@ -32,6 +37,10 @@ public final class ReplayProcessAttributedEventSubscriber: ProcessAttributedEven
 
         hasStarted = true
         isStopped = false
+        status = ProtectionEventSourceStatus(
+            state: .ready,
+            detail: "Replaying attributed test events from a file. Live Endpoint Security monitoring is still out of scope for this subscriber."
+        )
         completionGroup.enter()
 
         queue.async { [events] in
@@ -49,6 +58,10 @@ public final class ReplayProcessAttributedEventSubscriber: ProcessAttributedEven
 
     public func stop() {
         isStopped = true
+        status = ProtectionEventSourceStatus(
+            state: .bundled,
+            detail: "Replay/test subscriber is idle. It can be started again with a new event stream."
+        )
     }
 
     @discardableResult

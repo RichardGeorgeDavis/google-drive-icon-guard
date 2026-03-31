@@ -13,7 +13,7 @@ public final class HelperProtectionService: @unchecked Sendable {
 
     public init(
         policyEngine: HelperProtectionPolicyEngine = HelperProtectionPolicyEngine(),
-        subscriber: ProcessAttributedEventSubscriber = UnavailableProcessAttributedEventSubscriber(),
+        subscriber: ProcessAttributedEventSubscriber = EndpointSecurityProcessAttributedEventSubscriber(),
         queue: DispatchQueue = DispatchQueue(label: "DriveIconGuard.HelperProtectionService")
     ) {
         self.policyEngine = policyEngine
@@ -56,6 +56,12 @@ public final class HelperProtectionService: @unchecked Sendable {
     public func updateScopes(_ scopes: [DriveManagedScope]) {
         queue.sync {
             self.scopes = scopes
+        }
+    }
+
+    public func runtimeStatus() -> ProtectionEventSourceStatus {
+        queue.sync {
+            subscriber.status
         }
     }
 
