@@ -8,10 +8,12 @@ on:
 jobs:
   swift-package:
     runs-on: macos-latest
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Show active developer directory
         run: xcode-select -p
