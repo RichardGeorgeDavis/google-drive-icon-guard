@@ -12,6 +12,7 @@ ZIP_PATH="${DIST_ROOT}/${ARCHIVE_BASENAME}.zip"
 CHECKSUM_PATH="${ZIP_PATH}.sha256"
 HELPER_STATUS_PATH="${DIST_ROOT}/${ARCHIVE_BASENAME}.helper-status.json"
 PROVENANCE_PATH="${DIST_ROOT}/${ARCHIVE_BASENAME}.provenance.json"
+SCREENSHOT_RAW_BASE_URL="${SCREENSHOT_RAW_BASE_URL:-}"
 
 for required_file in \
   "${ZIP_PATH}" \
@@ -64,6 +65,19 @@ checksum_line="${checksum_value}  $(basename "${ZIP_PATH}")"
 
 mkdir -p "$(dirname "${RELEASE_NOTES_PATH}")"
 
+screenshots_section=""
+if [ -n "${SCREENSHOT_RAW_BASE_URL}" ]; then
+  screenshots_section=$(cat <<EOF
+## Preview images
+
+![Dashboard preview](${SCREENSHOT_RAW_BASE_URL}/release-dashboard-preview.png)
+
+![Findings preview](${SCREENSHOT_RAW_BASE_URL}/release-findings-preview.png)
+
+EOF
+)
+fi
+
 cat > "${RELEASE_NOTES_PATH}" <<EOF
 # Google Drive Icon Guard ${RELEASE_VERSION}
 
@@ -78,6 +92,19 @@ Current product boundary:
 - audit-first Google Drive scope discovery, artefact review, and export
 - packaged SwiftUI app bundle plus background LaunchAgent helper path
 - no entitlement-backed Endpoint Security host yet, so true closed-app live blocking is still **not** the shipped claim
+
+## What to test
+
+- launch the app and confirm the detected Google Drive-managed scopes look correct
+- review the current findings summary and largest scope hotspots
+- export findings and confirm the markdown report matches what the UI shows
+- if you are specifically testing helper lifecycle behavior, validate install/remove/status only as a beta helper path
+
+## How to report problems
+
+- open a GitHub issue and include the release tag, macOS version, and whether the problem came from the app, helper status, or packaged zip
+- attach the helper-status JSON and provenance JSON when the issue is packaging- or helper-related
+- do not report the current lack of Endpoint Security-backed closed-app blocking as a regression; that is still an explicit prerelease limit
 
 ## Included assets
 
@@ -103,6 +130,8 @@ Current product boundary:
 - Minimum macOS version: \`13.0\`
 - If this build is unsigned or not notarized, Gatekeeper may require right-click -> Open on first launch.
 - The current helper path is for beta evaluation. It does not yet represent the final Endpoint Security-backed closed-app prevention architecture.
+
+${screenshots_section}
 
 ## Checksum
 

@@ -136,6 +136,14 @@ Alpha and beta tester builds can now be published directly through GitHub Releas
 
 Those releases should still be treated as prereleases. Even when the packaging lane is green, the shipped claim remains audit-first until the entitlement-backed Endpoint Security host lane exists.
 
+## Preview
+
+Representative release-preview images generated from the current cached inventory snapshot:
+
+![Dashboard Preview](./docs/images/release-dashboard-preview.png)
+
+![Findings Preview](./docs/images/release-findings-preview.png)
+
 What is now in place for the next stage:
 
 - a runtime-support coordinator that combines the helper policy engine, ES subscriber, and live-session wiring

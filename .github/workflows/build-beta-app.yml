@@ -58,6 +58,9 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v5
 
+      - name: Generate release preview images
+        run: ./Tools/release/generate-release-previews.py
+
       - name: Resolve release metadata
         run: |
           if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
@@ -97,6 +100,7 @@ jobs:
             echo "RELEASE_TARGET=${GITHUB_SHA}"
             echo "PUBLISH_TO_GITHUB_RELEASE=${PUBLISH_TO_GITHUB_RELEASE}"
             echo "RELEASE_NOTES_PATH=dist/${ARCHIVE_BASENAME}.release-notes.md"
+            echo "SCREENSHOT_RAW_BASE_URL=https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/${GITHUB_SHA}/docs/images"
           } >> "${GITHUB_ENV}"
 
       - name: Show active developer directory
