@@ -175,7 +175,11 @@ if [ -f "${PROVENANCE_SIGNATURE_PATH}" ]; then
   security cms -D -i "${PROVENANCE_SIGNATURE_PATH}" >/dev/null
 fi
 
-file "${HELPER_PATH}" | rg -q "Mach-O"
+if command -v rg >/dev/null 2>&1; then
+  file "${HELPER_PATH}" | rg -q "Mach-O"
+else
+  file "${HELPER_PATH}" | grep -q "Mach-O"
+fi
 
 echo "Artifact verification passed."
 echo "  App: ${APP_PATH}"
