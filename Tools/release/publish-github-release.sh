@@ -76,12 +76,7 @@ if [ "${DRY_RUN}" = "true" ]; then
   exit 0
 fi
 
-existing_release_id="$(
-  gh api \
-    -H "Accept: application/vnd.github+json" \
-    "${api_root}/tags/${RELEASE_TAG}" \
-    --jq .id 2>/dev/null || true
-)"
+existing_release_id="$(gh release view "${RELEASE_TAG}" --json id --jq .id 2>/dev/null || true)"
 
 if [ -n "${existing_release_id}" ]; then
   release_url="$(
