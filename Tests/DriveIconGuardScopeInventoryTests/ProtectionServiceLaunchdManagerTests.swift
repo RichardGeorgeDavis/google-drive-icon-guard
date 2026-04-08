@@ -98,6 +98,54 @@ func protectionServiceDeploymentCoordinatorWritesErrorReceiptWhenBootstrapFails(
 }
 
 @Test
+func protectionServiceDeploymentCoordinatorTreatsLoadedServiceAsInstalledWhenBootstrapFails() throws {
+    let root = try makeLaunchdFixtureRoot()
+    _ = try makeLaunchdHelperExecutable(at: root)
+    let paths = ProtectionServiceRegistrationPaths(
+        applicationSupportDirectory: root.appendingPathComponent("ApplicationSupport", isDirectory: true),
+        launchAgentsDirectory: root.appendingPathComponent("LaunchAgents", isDirectory: true)
+    )
+    let installer = ProtectionServiceInstaller(
+        helperHostLocator: ProtectionHelperHostLocator(currentDirectoryPath: root.path),
+        registrationPaths: paths
+    )
+    let runner = StubLaunchctlRunner()
+    let bootstrapArgs = ["bootstrap", "gui/501", paths.launchAgentPlistURL(for: .beta).path]
+    runner.resultsByArguments[bootstrapArgs.joined(separator: "\u{1F}")] = ProtectionServiceLaunchdCommandResult(
+        arguments: bootstrapArgs,
+        exitCode: 5,
+        standardOutput: "",
+        standardError: "bootstrap failed: 5: Input/output error"
+    )
+    let printArgs = ["print", "gui/501/com.richardgeorgedavis.google-drive-icon-guard.beta.helper"]
+    runner.resultsByArguments[printArgs.joined(separator: "\u{1F}")] = ProtectionServiceLaunchdCommandResult(
+        arguments: printArgs,
+        exitCode: 0,
+        standardOutput: "service = loaded",
+        standardError: ""
+    )
+    let manager = ProtectionServiceLaunchdManager(
+        runner: runner,
+        registrationPaths: paths,
+        userID: 501
+    )
+    let coordinator = ProtectionServiceDeploymentCoordinator(
+        installer: installer,
+        launchdManager: manager
+    )
+
+    let result = try coordinator.installAndBootstrap()
+    let receiptData = try Data(contentsOf: paths.receiptURL)
+    let receipt = try JSONDecoder().decode(ProtectionInstallationReceipt.self, from: receiptData)
+
+    #expect(result.receipt.state == .installed)
+    #expect(receipt.state == .installed)
+    #expect(result.launchdStatus.isLoaded)
+    #expect(result.receipt.detail.contains("already loaded"))
+    #expect(runner.invocations.contains(["kickstart", "-k", "gui/501/com.richardgeorgedavis.google-drive-icon-guard.beta.helper"]))
+}
+
+@Test
 func protectionServiceDeploymentCoordinatorBootoutRemovesFiles() throws {
     let root = try makeLaunchdFixtureRoot()
     _ = try makeLaunchdHelperExecutable(at: root)
@@ -247,6 +295,53 @@ final class ProtectionServiceLaunchdManagerTests: XCTestCase {
         XCTAssertEqual(result.receipt.state, .error)
         XCTAssertEqual(receipt.state, .error)
         XCTAssertFalse(result.launchdStatus.isLoaded)
+    }
+
+    func testProtectionServiceDeploymentCoordinatorTreatsLoadedServiceAsInstalledWhenBootstrapFails() throws {
+        let root = try makeLaunchdFixtureRoot()
+        _ = try makeLaunchdHelperExecutable(at: root)
+        let paths = ProtectionServiceRegistrationPaths(
+            applicationSupportDirectory: root.appendingPathComponent("ApplicationSupport", isDirectory: true),
+            launchAgentsDirectory: root.appendingPathComponent("LaunchAgents", isDirectory: true)
+        )
+        let installer = ProtectionServiceInstaller(
+            helperHostLocator: ProtectionHelperHostLocator(currentDirectoryPath: root.path),
+            registrationPaths: paths
+        )
+        let runner = StubLaunchctlRunner()
+        let bootstrapArgs = ["bootstrap", "gui/501", paths.launchAgentPlistURL(for: .beta).path]
+        runner.resultsByArguments[bootstrapArgs.joined(separator: "\u{1F}")] = ProtectionServiceLaunchdCommandResult(
+            arguments: bootstrapArgs,
+            exitCode: 5,
+            standardOutput: "",
+            standardError: "bootstrap failed: 5: Input/output error"
+        )
+        let printArgs = ["print", "gui/501/com.richardgeorgedavis.google-drive-icon-guard.beta.helper"]
+        runner.resultsByArguments[printArgs.joined(separator: "\u{1F}")] = ProtectionServiceLaunchdCommandResult(
+            arguments: printArgs,
+            exitCode: 0,
+            standardOutput: "service = loaded",
+            standardError: ""
+        )
+        let manager = ProtectionServiceLaunchdManager(
+            runner: runner,
+            registrationPaths: paths,
+            userID: 501
+        )
+        let coordinator = ProtectionServiceDeploymentCoordinator(
+            installer: installer,
+            launchdManager: manager
+        )
+
+        let result = try coordinator.installAndBootstrap()
+        let receiptData = try Data(contentsOf: paths.receiptURL)
+        let receipt = try JSONDecoder().decode(ProtectionInstallationReceipt.self, from: receiptData)
+
+        XCTAssertEqual(result.receipt.state, .installed)
+        XCTAssertEqual(receipt.state, .installed)
+        XCTAssertTrue(result.launchdStatus.isLoaded)
+        XCTAssertTrue(result.receipt.detail.contains("already loaded"))
+        XCTAssertTrue(runner.invocations.contains(["kickstart", "-k", "gui/501/com.richardgeorgedavis.google-drive-icon-guard.beta.helper"]))
     }
 
     func testProtectionServiceDeploymentCoordinatorBootoutRemovesFiles() throws {

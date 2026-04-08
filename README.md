@@ -138,11 +138,13 @@ Those releases should still be treated as prereleases. Even when the packaging l
 
 ## Preview
 
-Representative release-preview images generated from the current cached inventory snapshot:
+Representative app captures from the current beta build:
 
-![Dashboard Preview](./docs/images/release-dashboard-preview.png)
+![Dashboard Preview](./docs/images/readme-hero-dashboard.png)
 
-![Findings Preview](./docs/images/release-findings-preview.png)
+![Live Protection Preview](./docs/images/support-helper-panel.png)
+
+[Full App Screenshot](./docs/images/app-full-screenshot.png)
 
 What is now in place for the next stage:
 

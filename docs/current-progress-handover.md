@@ -32,6 +32,12 @@ The repo is now a standalone Git repository with:
 - app-managed helper LaunchAgent install/start/remove/status controls in the SwiftUI app
 - persisted helper protection configuration for the installed helper path
 - automatic app-side switch to the named Mach-service helper boundary when the background helper is loaded
+- finite-timeout XPC handling so a stale or unreachable installed helper does not hang the app UI
+- recoverable helper install handling when `launchctl bootstrap` reports an error but the LaunchAgent is already loaded and reusable
+- a custom About window with copied diagnostics, GitHub issue links, release/build trust state, and helper lifecycle details
+- main-screen build/support diagnostics, stronger Live Protection error callouts, and direct support actions from the dashboard
+- real shipped-app screenshots wired into the README, support docs, and generated GitHub release notes
+- dedicated History and Logs views backed by persisted snapshot comparison and activity-log state
 
 The project is still in **beta / active development**. It is not yet the final downloadable app release.
 
@@ -39,10 +45,11 @@ The project is still in **beta / active development**. It is not yet the final d
 
 The latest local validation rerun on **2026-04-08** is green:
 
+- `swift build --product drive-icon-guard-viewer`
 - `swift build --product drive-icon-guard-helper`
 - `swift test`
 - `./Tools/release/build-beta-app.sh`
-- current full suite size at handoff: `81` passing tests
+- current full suite size at handoff: `83` passing tests
 
 ## What is implemented
 
@@ -69,8 +76,12 @@ The current implementation can:
 - allow the protected helper boundary to accept a pluggable runtime controller instead of only the bare helper service
 - surface runtime-start failure through boundary status and command outcomes
 - deliver helper/runtime evaluations asynchronously so synchronous startup callbacks do not deadlock the endpoint queue
+- time out and fall back cleanly when launchd says the helper is loaded but the Mach service is stale or unreachable
+- treat already-loaded LaunchAgent helper reuse as an installed state instead of a false hard install error
 - emit typed protection remediation status over shared IPC contracts
 - centralize default protection status construction through shared `ProtectionStatusFactory`
+- expose copied support diagnostics, release/build metadata, and GitHub issue links from both the About window and the main app surface
+- present persisted snapshot history and operational activity logs as first-class views in the app
 - classify each discovered scope by:
   - drive mode
   - scope kind
@@ -159,6 +170,13 @@ This is now beyond anonymous test IPC. The repo can write launch-agent registrat
 
 This completes the repo-side work for Batch 5 publication plumbing. The remaining release blocker is operational setup outside the repo: real Apple signing material, a working notary profile, and tester-facing screenshots/polish.
 
+Subsequent repo work also refreshed the shipped-doc surface around that release lane:
+
+- README now uses real app captures instead of generated mock preview images
+- first-run/support docs now include actual app screenshots
+- the custom About window and dashboard support actions make tester issue filing materially easier
+- existing alpha/beta prerelease entries should be refreshed when these UI/support changes are pushed
+
 ## New runtime-lane support now in repo
 
 - added `DriveIconGuardRuntimeSupport` as the package-side runtime lane support library
@@ -225,6 +243,9 @@ Still important, but secondary to that host-lane work:
 - real Apple signing/notary credentials in CI
 - clean-machine packaged install/bootstrap/reconnect validation
 - screenshots and public beta notes that match the shipped behavior exactly
+- helper version/update detection so stale installed helpers can be upgraded explicitly rather than only reinstalled generically
+- clearer operator logs/history filtering plus a compact recent-activity summary on the main screen
+- a top-level cleanup action that aggregates supported findings once the cleanup UX is finalized
 
 ## Testing and toolchain note
 
@@ -237,6 +258,8 @@ Local testing can be misleading on machines that use only Apple Command Line Too
 1. Finish the Xcode host/entitlement lane for real Endpoint Security callback traffic.
 2. Validate the packaged app + installed helper path on a clean machine after that live lane is in place.
 3. Provision and validate the real Apple signing/notary credentials used by the hardened release lane.
+4. Add helper version drift detection and an explicit `Update Helper` path.
+5. Tighten history/log UX and add a top-level cleanup action for supported findings.
 
 ## Planned next-step execution (handover-ready)
 

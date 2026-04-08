@@ -202,12 +202,25 @@ public struct ProtectionServiceDeploymentCoordinator {
                 launchdStatus: launchdStatus
             )
         } catch {
-            let failureStatus = (try? launchdManager.status()) ?? ProtectionServiceLaunchdStatus(
+            var failureStatus = (try? launchdManager.status()) ?? ProtectionServiceLaunchdStatus(
                 domainTarget: launchdManager.domainTarget,
                 serviceTarget: launchdManager.serviceTarget,
                 isLoaded: false,
                 detail: error.localizedDescription
             )
+
+            if failureStatus.isLoaded {
+                _ = try? launchdManager.kickstart()
+                failureStatus = (try? launchdManager.status()) ?? failureStatus
+                receipt.state = .installed
+                receipt.detail = "LaunchAgent files were written. launchctl bootstrap returned an error, but an existing helper service is already loaded for \(failureStatus.serviceTarget). Reusing that running service; use Remove Installed Helper if you need a clean reinstall."
+                try installer.persistReceipt(receipt)
+                return ProtectionServiceDeploymentResult(
+                    receipt: receipt,
+                    launchdStatus: failureStatus
+                )
+            }
+
             receipt.state = .error
             receipt.detail = "LaunchAgent files were written, but launchctl bootstrap failed: \(error.localizedDescription)"
             try? installer.persistReceipt(receipt)

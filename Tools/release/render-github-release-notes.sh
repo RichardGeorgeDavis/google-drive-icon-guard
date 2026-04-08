@@ -67,12 +67,14 @@ mkdir -p "$(dirname "${RELEASE_NOTES_PATH}")"
 
 screenshots_section=""
 if [ -n "${SCREENSHOT_RAW_BASE_URL}" ]; then
-  screenshots_section=$(cat <<EOF
+screenshots_section=$(cat <<EOF
 ## Preview images
 
-![Dashboard preview](${SCREENSHOT_RAW_BASE_URL}/release-dashboard-preview.png)
+![Dashboard preview](${SCREENSHOT_RAW_BASE_URL}/release-dashboard-real.png)
 
-![Findings preview](${SCREENSHOT_RAW_BASE_URL}/release-findings-preview.png)
+![Live protection preview](${SCREENSHOT_RAW_BASE_URL}/release-live-protection-real.png)
+
+Full app capture: [app-full-screenshot.png](${SCREENSHOT_RAW_BASE_URL}/app-full-screenshot.png)
 
 EOF
 )

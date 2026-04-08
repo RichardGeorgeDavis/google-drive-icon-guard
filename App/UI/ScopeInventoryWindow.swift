@@ -54,10 +54,12 @@ struct ScopeInventoryWindow: View {
     @AppStorage("scopeInventory.showWarningsInLogs") private var showWarningsInLogs = true
     @AppStorage("scopeInventory.liveProtectionEnabled") private var liveProtectionEnabled = true
 
+    private let supportDiagnostics = AppSupportDiagnostics.current()
     @StateObject private var viewModel = ScopeInventoryViewModel()
     @State private var selection: AppSection? = .dashboard
     @State private var selectedScopeID: UUID?
     @State private var exportMessage: String?
+    @State private var supportMessage: String?
 
     var body: some View {
         NavigationSplitView {
@@ -137,9 +139,10 @@ struct ScopeInventoryWindow: View {
                     subtitle: "Confirm the detected locations, review current artefacts, and take action from one place."
                 )
 
+                buildSupportPanel
+                liveProtectionPanel
                 stats
                 journeySection
-                liveProtectionPanel
                 permissionRetryNotice
                 inventoryReviewSection
                 warningsSection
@@ -148,6 +151,10 @@ struct ScopeInventoryWindow: View {
 
                 if let exportMessage {
                     inlineNotice(title: "Export", systemImage: "square.and.arrow.up", message: exportMessage)
+                }
+
+                if let supportMessage {
+                    inlineNotice(title: "Support", systemImage: "lifepreserver", message: supportMessage)
                 }
 
                 if let persistedPath = viewModel.persistedPath {
@@ -223,17 +230,64 @@ struct ScopeInventoryWindow: View {
         }
     }
 
+    private var buildSupportPanel: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Label("Build and Support", systemImage: "hammer")
+                .font(.headline)
+
+            Text("Running from \(buildSourceLabel). Use this summary when reporting beta issues or helper startup failures.")
+                .foregroundStyle(.secondary)
+
+            HStack(spacing: 10) {
+                badge(supportDiagnostics.versionLine, tint: .blue)
+                if let releaseTag = supportDiagnostics.releaseTag {
+                    badge("tag \(releaseTag)", tint: .teal)
+                }
+                if let gitCommit = supportDiagnostics.gitCommit {
+                    badge("commit \(gitCommit)", tint: .gray)
+                }
+                badge(supportDiagnostics.signingStatus.lowercased(), tint: signingTintColor)
+                badge(supportDiagnostics.notarizationStatus.lowercased(), tint: notarizationTintColor)
+            }
+            .font(.caption)
+            .foregroundStyle(.secondary)
+
+            HStack(spacing: 10) {
+                metadataLabel("Running From", value: buildSourceLabel)
+                metadataLabel("Last Refresh", value: lastRefreshLabel)
+            }
+            .font(.caption)
+            .foregroundStyle(.secondary)
+
+            Text(supportDiagnostics.bundlePath)
+                .font(.system(.caption, design: .monospaced))
+                .foregroundStyle(.secondary)
+                .textSelection(.enabled)
+
+            supportActionButtons(includeLoginItems: liveProtectionNeedsAttention)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(16)
+        .background(.quaternary.opacity(0.35), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+
     private var stats: some View {
         let report = viewModel.report
         let scopes = report?.scopes ?? []
         let artefactInventory = report?.artefactInventory
 
-        return HStack(spacing: 12) {
-            statCard(title: "Scopes", value: "\(scopes.count)")
-            statCard(title: "Supported", value: "\(scopes.filter { $0.supportStatus == .supported }.count)")
-            statCard(title: "Audit Only", value: "\(scopes.filter { $0.supportStatus == .auditOnly }.count)")
-            statCard(title: "Artefacts", value: "\(artefactInventory?.totalArtefactCount ?? 0)")
-            statCard(title: "Disk Impact", value: formattedByteCount(artefactInventory?.totalBytes ?? 0))
+        return VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 12) {
+                statCard(title: "Scopes", value: "\(scopes.count)")
+                statCard(title: "Supported", value: "\(scopes.filter { $0.supportStatus == .supported }.count)")
+                statCard(title: "Audit Only", value: "\(scopes.filter { $0.supportStatus == .auditOnly }.count)")
+                statCard(title: "Artefacts", value: "\(artefactInventory?.totalArtefactCount ?? 0)")
+                statCard(title: "Disk Impact", value: formattedByteCount(artefactInventory?.totalBytes ?? 0))
+            }
+
+            Text("Last refreshed: \(lastRefreshLabel)")
+                .font(.caption)
+                .foregroundStyle(.secondary)
         }
     }
 
@@ -757,6 +811,12 @@ struct ScopeInventoryWindow: View {
                         comparisonDeltaCard(title: "Scopes", delta: comparison.delta.scopeCount)
                         comparisonDeltaCard(title: "Warnings", delta: comparison.delta.warningCount)
                     }
+
+                    if snapshotComparisonIsStable {
+                        Text("No change since the previous snapshot. History is working; this refresh just did not detect any new scope, artefact, or warning delta.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(14)
@@ -1007,6 +1067,15 @@ struct ScopeInventoryWindow: View {
             Label("Live Protection", systemImage: liveProtectionActive ? "shield.lefthalf.filled" : "shield.slash")
                 .font(.headline)
 
+            if let liveProtectionAttention {
+                statusCallout(
+                    title: liveProtectionAttention.title,
+                    systemImage: liveProtectionAttention.systemImage,
+                    message: liveProtectionAttention.message,
+                    tint: liveProtectionAttention.tint
+                )
+            }
+
             Text(viewModel.protectionStatus.detail)
                 .foregroundStyle(.secondary)
 
@@ -1053,6 +1122,7 @@ struct ScopeInventoryWindow: View {
             if let helperServiceStatus = viewModel.helperServiceStatus {
                 HStack(spacing: 10) {
                     badge(helperServiceStatus.isLoaded ? "launchd loaded" : "launchd not loaded", tint: helperServiceStatus.isLoaded ? .green : .orange)
+                    metadataLabel("LaunchAgent", value: supportDiagnostics.launchdLabel)
                     metadataLabel("Service", value: helperServiceStatus.serviceTarget)
                 }
                 .font(.caption)
@@ -1076,7 +1146,7 @@ struct ScopeInventoryWindow: View {
                 }
                 .disabled(viewModel.isUpdatingHelperService)
 
-                Button("Remove Installed Helper") {
+                Button(helperRemovalButtonTitle) {
                     viewModel.removeInstalledHelperService()
                 }
                 .disabled(viewModel.isUpdatingHelperService || viewModel.protectionStatus.installationState != .installed)
@@ -1091,6 +1161,25 @@ struct ScopeInventoryWindow: View {
                 Text(helperLifecycleMessage)
                     .font(.caption)
                     .foregroundStyle(.secondary)
+            }
+
+            if liveProtectionNeedsAttention {
+                HStack(spacing: 10) {
+                    Button("Open Login Items") {
+                        openLoginItemsSettings()
+                    }
+                    .buttonStyle(.bordered)
+
+                    Button("Copy Diagnostics") {
+                        copySupportDetails()
+                    }
+                    .buttonStyle(.bordered)
+
+                    Button("Report Issue") {
+                        reportIssue()
+                    }
+                    .buttonStyle(.bordered)
+                }
             }
 
             Text("Installed helper lifecycle is now handled from the app, but true Google-Drive-only live blocking while the app is closed still depends on the real Endpoint Security host lane becoming ready.")
@@ -1194,6 +1283,23 @@ struct ScopeInventoryWindow: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(14)
         .background(.quaternary.opacity(0.35), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+
+    private func statusCallout(title: String, systemImage: String, message: String, tint: Color) -> some View {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: systemImage)
+                .foregroundStyle(tint)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title)
+                    .font(.headline)
+                    .foregroundStyle(tint)
+                Text(message)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(14)
+        .background(tint.opacity(0.12), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
     }
 
     private func placeholderPanel(title: String, systemImage: String, description: String) -> some View {
@@ -1432,6 +1538,94 @@ struct ScopeInventoryWindow: View {
         combinedWarnings.filter { $0.code.contains("permission_denied") }
     }
 
+    private var lastRefreshLabel: String {
+        guard let generatedAt = viewModel.report?.generatedAt else {
+            return viewModel.isLoading ? "Refreshing now" : "Not refreshed yet"
+        }
+        return formattedTimestamp(generatedAt)
+    }
+
+    private var buildSourceLabel: String {
+        let path = supportDiagnostics.bundlePath
+        if path.hasPrefix("/Applications/") {
+            return "Applications folder"
+        }
+        if path.contains("/dist/") {
+            return "Packaged dist build"
+        }
+        return "Local or repo build"
+    }
+
+    private var signingTintColor: Color {
+        switch supportDiagnostics.signingStatus {
+        case "Unsigned", "Ad hoc signed":
+            return .orange
+        default:
+            return .green
+        }
+    }
+
+    private var notarizationTintColor: Color {
+        supportDiagnostics.notarizationStatus == "Notarized" ? .green : .orange
+    }
+
+    private var helperRemovalButtonTitle: String {
+        liveProtectionNeedsAttention ? "Disable + Remove Helper" : "Remove Installed Helper"
+    }
+
+    private var liveProtectionNeedsAttention: Bool {
+        liveProtectionAttention != nil
+    }
+
+    private var liveProtectionAttention: (title: String, message: String, systemImage: String, tint: Color)? {
+        if viewModel.protectionStatus.installationState == .error {
+            return (
+                title: "Helper installation is in an error state",
+                message: "\(viewModel.protectionStatus.installationDescription) Remove the installed helper, then reinstall only if you are explicitly testing helper lifecycle behavior.",
+                systemImage: "exclamationmark.triangle.fill",
+                tint: .red
+            )
+        }
+
+        if let helperServiceStatus = viewModel.helperServiceStatus,
+           !helperServiceStatus.isLoaded,
+           viewModel.protectionStatus.installationState == .installed {
+            return (
+                title: "Installed helper is not responding",
+                message: "\(condensedDetail(helperServiceStatus.detail)) Open Login Items if the helper looks enabled there, then use Disable + Remove Helper to clear the stale service before reinstalling.",
+                systemImage: "bolt.horizontal.circle.fill",
+                tint: .orange
+            )
+        }
+
+        if let helperLifecycleMessage = viewModel.helperLifecycleMessage,
+           helperLifecycleMessage.localizedCaseInsensitiveContains("failed")
+            || helperLifecycleMessage.localizedCaseInsensitiveContains("timed out")
+            || helperLifecycleMessage.localizedCaseInsensitiveContains("could not find service")
+            || helperLifecycleMessage.localizedCaseInsensitiveContains("bad request") {
+            return (
+                title: "Helper lifecycle action needs attention",
+                message: "\(condensedDetail(helperLifecycleMessage)) If the helper was toggled in Login Items, disable it there before trying another install cycle.",
+                systemImage: "exclamationmark.triangle.fill",
+                tint: .orange
+            )
+        }
+
+        return nil
+    }
+
+    private var snapshotComparisonIsStable: Bool {
+        guard let comparison = viewModel.historyComparison else {
+            return false
+        }
+
+        return comparison.delta.artefactCount == 0
+            && comparison.delta.totalBytes == 0
+            && comparison.delta.scopeCount == 0
+            && comparison.delta.warningCount == 0
+            && comparison.delta.perScopeChanges.isEmpty
+    }
+
     private var selectedScope: DriveManagedScope? {
         guard let report = viewModel.report else {
             return nil
@@ -1657,6 +1851,35 @@ struct ScopeInventoryWindow: View {
         NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: path)])
     }
 
+    private func supportActionButtons(includeLoginItems: Bool) -> some View {
+        HStack(spacing: 10) {
+            Button("Copy Diagnostics") {
+                copySupportDetails()
+            }
+            .buttonStyle(.bordered)
+
+            Button("Report Issue") {
+                reportIssue()
+            }
+            .buttonStyle(.bordered)
+
+            Button("Reveal App") {
+                revealInFinder(path: supportDiagnostics.bundlePath)
+            }
+            .buttonStyle(.bordered)
+
+            if includeLoginItems {
+                Button("Open Login Items") {
+                    openLoginItemsSettings()
+                }
+                .buttonStyle(.bordered)
+            } else {
+                Link("Open Releases", destination: AppSupportLinks.releases)
+                    .buttonStyle(.bordered)
+            }
+        }
+    }
+
     private func revealStorageRoot() {
         let storageURL = URL(fileURLWithPath: viewModel.storageRootPath, isDirectory: true)
         let targetURL: URL
@@ -1668,6 +1891,113 @@ struct ScopeInventoryWindow: View {
         }
 
         NSWorkspace.shared.activateFileViewerSelecting([targetURL])
+    }
+
+    private func copySupportDetails() {
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        pasteboard.setString(dashboardSupportSummary, forType: .string)
+        supportMessage = "Copied build, helper, and launchd diagnostics to the clipboard for GitHub support."
+    }
+
+    private func reportIssue() {
+        supportMessage = "Opening a prefilled GitHub issue with the current build and helper diagnostics."
+        NSWorkspace.shared.open(dashboardIssueURL)
+    }
+
+    private var dashboardIssueURL: URL {
+        var components = URLComponents(url: AppSupportLinks.issues.appendingPathComponent("new"), resolvingAgainstBaseURL: false)
+        components?.queryItems = [
+            URLQueryItem(name: "title", value: dashboardIssueTitle),
+            URLQueryItem(name: "body", value: dashboardIssueBody)
+        ]
+        return components?.url ?? AppSupportLinks.issues
+    }
+
+    private var dashboardIssueTitle: String {
+        if let releaseTag = supportDiagnostics.releaseTag {
+            return "[\(releaseTag)] Dashboard report"
+        }
+        if let gitCommit = supportDiagnostics.gitCommit {
+            return "[\(gitCommit)] Dashboard report"
+        }
+        return "Dashboard report"
+    }
+
+    private var dashboardIssueBody: String {
+        """
+        ## Summary
+
+        Describe the issue.
+
+        ## What Happened
+
+        -
+
+        ## Expected
+
+        -
+
+        ## Support Details
+
+        ```text
+        \(dashboardSupportSummary)
+        ```
+        """
+    }
+
+    private var dashboardSupportSummary: String {
+        """
+        App: Google Drive Icon Guard
+        Version: \(supportDiagnostics.versionLine)
+        Release tag: \(supportDiagnostics.releaseTag ?? "unknown")
+        Git commit: \(supportDiagnostics.gitCommit ?? "unknown")
+        Git ref: \(supportDiagnostics.gitRef ?? "unknown")
+        Bundle ID: \(supportDiagnostics.bundleIdentifier)
+        Bundle Path: \(supportDiagnostics.bundlePath)
+        Build source: \(buildSourceLabel)
+        Executable: \(supportDiagnostics.executableName)
+        macOS: \(supportDiagnostics.macosVersion)
+        Signing: \(supportDiagnostics.signingStatus)
+        Notarization: \(supportDiagnostics.notarizationStatus)
+        Signing Identity: \(supportDiagnostics.codesignIdentity ?? "unknown")
+        LaunchAgent Label: \(supportDiagnostics.launchdLabel)
+        Mach Service: \(supportDiagnostics.machServiceName)
+        launchd Service: \(viewModel.helperServiceStatus?.serviceTarget ?? supportDiagnostics.serviceTarget)
+        launchd Status: \(viewModel.helperServiceStatus?.isLoaded == true ? "Loaded" : "Not loaded")
+        launchd Detail: \(condensedDetail(viewModel.helperServiceStatus?.detail ?? supportDiagnostics.launchdDetail))
+        Helper Install State: \(viewModel.protectionStatus.installationState.rawValue)
+        Helper Install Detail: \(condensedDetail(viewModel.protectionStatus.installationDescription))
+        Helper Executable: \(viewModel.protectionStatus.helperExecutablePath ?? supportDiagnostics.helperExecutablePath ?? "none")
+        Protection Detail: \(condensedDetail(viewModel.protectionStatus.detail))
+        Event Source: \(viewModel.protectionStatus.eventSourceState.rawValue)
+        Event Source Detail: \(condensedDetail(viewModel.protectionStatus.eventSourceDescription))
+        Helper Lifecycle Message: \(condensedDetail(viewModel.helperLifecycleMessage ?? "none"))
+        Last Refresh: \(lastRefreshLabel)
+        GitHub Issues: \(AppSupportLinks.issues.absoluteString)
+        """
+    }
+
+    private func condensedDetail(_ value: String, maxLength: Int = 220) -> String {
+        let collapsed = value
+            .replacingOccurrences(of: "\n", with: " ")
+            .replacingOccurrences(of: "\t", with: " ")
+            .split(separator: " ")
+            .joined(separator: " ")
+        if collapsed.count <= maxLength {
+            return collapsed
+        }
+        let index = collapsed.index(collapsed.startIndex, offsetBy: maxLength)
+        return String(collapsed[..<index]) + "…"
+    }
+
+    private func openLoginItemsSettings() {
+        if let url = URL(string: "x-apple.systempreferences:com.apple.LoginItems-Settings.extension"),
+           NSWorkspace.shared.open(url) {
+            return
+        }
+
+        _ = NSWorkspace.shared.open(URL(fileURLWithPath: "/System/Applications/System Settings.app"))
     }
 
     private func revealMatchInFinder(scopePath: String, relativePath: String) {

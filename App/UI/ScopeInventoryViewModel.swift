@@ -6,6 +6,11 @@ import Foundation
 
 @MainActor
 final class ScopeInventoryViewModel: ObservableObject {
+    private struct ProtectionClientResolution {
+        let client: any ProtectionServiceClient
+        let fallbackDetail: String?
+    }
+
     @Published private(set) var report: ScopeInventoryReport?
     @Published private(set) var storageRootPath: String
     @Published private(set) var persistedPath: String?
@@ -50,10 +55,12 @@ final class ScopeInventoryViewModel: ObservableObject {
         self.storageRootPath = service.storageRootPath()
         if protectionClient == nil {
             self.helperServiceStatus = Self.currentHelperServiceStatus()
-            self.protectionClient = Self.makeProtectionClient(
+            let resolution = Self.makeProtectionClient(
                 helperServiceStatus: self.helperServiceStatus,
                 registrationConfiguration: registrationConfiguration
             )
+            self.protectionClient = resolution.client
+            self.helperLifecycleMessage = resolution.fallbackDetail
         }
         bindProtectionClientEventHandler()
         self.protectionStatus = self.protectionClient.status
@@ -461,10 +468,14 @@ final class ScopeInventoryViewModel: ObservableObject {
         }
 
         protectionClient.stop()
-        protectionClient = Self.makeProtectionClient(
+        let resolution = Self.makeProtectionClient(
             helperServiceStatus: helperServiceStatus,
             registrationConfiguration: registrationConfiguration
         )
+        protectionClient = resolution.client
+        if let fallbackDetail = resolution.fallbackDetail {
+            helperLifecycleMessage = fallbackDetail
+        }
         bindProtectionClientEventHandler()
     }
 
@@ -475,12 +486,25 @@ final class ScopeInventoryViewModel: ObservableObject {
     private static func makeProtectionClient(
         helperServiceStatus: ProtectionServiceLaunchdStatus?,
         registrationConfiguration: ProtectionServiceRegistrationConfiguration
-    ) -> any ProtectionServiceClient {
+    ) -> ProtectionClientResolution {
         if helperServiceStatus?.isLoaded == true {
-            return XPCProtectionServiceClient(machServiceName: registrationConfiguration.machServiceName)
+            let installedClient = XPCProtectionServiceClient(machServiceName: registrationConfiguration.machServiceName)
+            if installedClient.isReachable {
+                return ProtectionClientResolution(client: installedClient, fallbackDetail: nil)
+            }
+
+            let fallbackDetail = installedClient.lastTransportFailureDetail
+                ?? "The installed background helper is loaded in launchd, but its XPC service is not responding. Falling back to embedded audit-mode protection."
+            return ProtectionClientResolution(
+                client: EmbeddedProtectionServiceClient(),
+                fallbackDetail: fallbackDetail
+            )
         }
 
-        return EmbeddedProtectionServiceClient()
+        return ProtectionClientResolution(
+            client: EmbeddedProtectionServiceClient(),
+            fallbackDetail: nil
+        )
     }
 
     private func handleProtectionEvents(_ events: [ProtectionServiceEventPayload]) {

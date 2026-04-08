@@ -64,6 +64,8 @@ swift test
 
 ## What to expect on first run
 
+![First-run dashboard](./images/first-run-dashboard.png)
+
 - the CLI should print a JSON inventory report
 - the CLI should persist the latest snapshot to `cache/scope-inventory/latest.json`
 - the CLI should also write a timestamped history snapshot under `cache/scope-inventory/history/`
@@ -136,6 +138,8 @@ The viewer reflects the same underlying discovery service used by the CLI.
 
 That is expected in the current build.
 
+![Live protection helper state](./images/support-helper-panel.png)
+
 The helper host and install scaffold are packaged, but live Google-Drive-only blocking still needs:
 
 - a real Endpoint Security event source
@@ -173,6 +177,8 @@ cache/scope-inventory/history/
 That is expected for local inventory output. Public-facing docs should avoid copying those paths directly unless they are clearly marked as local examples.
 
 ## When opening an issue
+
+![About window support details](./images/about-support-window.png)
 
 Include:
 

@@ -16,16 +16,22 @@
 - added a shared runtime-controller seam so the protected helper boundary can consume either `HelperProtectionService` or the future live `EndpointSecurityRuntimeCoordinator`
 - added endpoint coverage for runtime-start failure reporting and synchronous startup callback delivery without queue deadlock
 - added generated GitHub release notes plus alpha/beta GitHub prerelease publication from the release workflow
+- added finite-timeout XPC handling so stale or unreachable installed helpers no longer hang the app
+- changed helper install/bootstrap handling to reuse an already-loaded LaunchAgent service instead of surfacing a false hard install error
+- added a custom About window with copied diagnostics, direct GitHub issue links, release/build trust state, and helper lifecycle details
+- added main-screen build/support diagnostics, stronger Live Protection recovery messaging, and direct support actions from the dashboard
+- replaced generated mock release/README imagery with real app screenshots and wired those captures into support docs and generated release notes
 
 ### Testing
 
-- added regression coverage for monitor stop behavior, ES callback mapping, runtime-lane session flow, install receipt handling, authorization rules, and launchd lifecycle handling
+- added regression coverage for monitor stop behavior, ES callback mapping, runtime-lane session flow, install receipt handling, authorization rules, launchd lifecycle handling, stale Mach-service timeout handling, and bootstrap-failed-but-already-loaded helper reuse
 
 ### Documentation
 
 - refreshed handover, roadmap, release packaging, and launch-checklist docs to match the new runtime/install/release boundaries, including helper launchd lifecycle support
 - added a dedicated development setup guide and an explicit beta support matrix for public docs
 - refreshed handover docs to make the Endpoint Security host/entitlement lane the primary next step for a proper prevention beta
+- refreshed README/support docs and release-note assets around the shipped app UI and support flow
 
 ## 2026-04-01
 

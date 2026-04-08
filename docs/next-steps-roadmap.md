@@ -96,7 +96,8 @@ Current implementation progress:
 - release packaging now supports optional codesign, notarization, stapling, and CMS provenance signing when identities/profiles are supplied
 - CI is now split between fast unit tests and a slower packaging smoke lane
 - release publication can now create or update alpha/beta GitHub prereleases and attach the packaged assets directly to Releases
-- remaining work is operational: provision real Apple signing credentials, validate notarization in CI, and add screenshots/public release polish
+- README/support/release-note surfaces now use real app screenshots and copied support diagnostics
+- remaining work is operational: provision real Apple signing credentials, validate notarization in CI, and keep public prerelease notes aligned with the shipped UI/support surface
 
 ## 30/60/90 day plan
 
@@ -138,7 +139,9 @@ If that first item is not complete, keep the public beta claim at audit/review/h
 2. Validate the packaged app + installed helper boundary on a clean machine once that live lane exists
 3. Validate Batch 5 with real Apple signing/notary credentials in CI
 4. Validate the published prerelease entry, attached assets, and release notes on the next tester build
-5. Then move to operator readiness UX and policy-profile expansion
+5. Add helper version drift detection so installed helpers can be upgraded intentionally
+6. Tighten operator readiness UX: clearer history/log filtering, recent-activity summary, and top-level supported cleanup action
+7. Then move to policy-profile expansion
 
 ## Performance optimization track
 
@@ -180,6 +183,9 @@ If that first item is not complete, keep the public beta claim at audit/review/h
 - add a Protection Readiness view (entitlements, install, approval blockers)
 - add guided permission recovery and one-click troubleshooting exports
 - add clearer per-scope risk/recommendation wording for beta users
+- add helper version/update visibility plus an explicit `Update Helper` action when the installed helper is stale
+- add a compact recent-activity summary to the main screen so helper/install failures are visible without navigating to Logs
+- add a top-level `Run Cleanup` action for supported findings after the cleanup flow is finalized and tested
 
 ### Release and operations maturity
 

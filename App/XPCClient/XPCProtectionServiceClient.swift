@@ -5,16 +5,20 @@ import DriveIconGuardIPC
 public final class XPCProtectionServiceClient: NSObject, ProtectionServiceClient {
     public private(set) var status = ProtectionStatusFactory.unavailable()
     public private(set) var helperExecutablePath: String?
+    public private(set) var isReachable = false
+    public private(set) var lastTransportFailureDetail: String?
 
     private let connection: NSXPCConnection
     private let callbackListener: NSXPCListener
     private let callbackSink: ProtectionXPCEventSink
+    private let requestTimeout: TimeInterval
     private var eventHandler: (@Sendable ([ProtectionServiceEventPayload]) -> Void)?
 
-    public init(listenerEndpoint: NSXPCListenerEndpoint) {
+    public init(listenerEndpoint: NSXPCListenerEndpoint, requestTimeout: TimeInterval = 1.0) {
         self.connection = NSXPCConnection(listenerEndpoint: listenerEndpoint)
         self.callbackListener = NSXPCListener.anonymous()
         self.callbackSink = ProtectionXPCEventSink()
+        self.requestTimeout = requestTimeout
         super.init()
         configureConnection()
         status = requestOutcome(command: .queryStatus) { proxy, reply in
@@ -23,10 +27,15 @@ public final class XPCProtectionServiceClient: NSObject, ProtectionServiceClient
         helperExecutablePath = status.helperExecutablePath
     }
 
-    public init(machServiceName: String, options: NSXPCConnection.Options = []) {
+    public init(
+        machServiceName: String,
+        options: NSXPCConnection.Options = [],
+        requestTimeout: TimeInterval = 1.0
+    ) {
         self.connection = NSXPCConnection(machServiceName: machServiceName, options: options)
         self.callbackListener = NSXPCListener.anonymous()
         self.callbackSink = ProtectionXPCEventSink()
+        self.requestTimeout = requestTimeout
         super.init()
         configureConnection()
         status = requestOutcome(command: .queryStatus) { proxy, reply in
@@ -36,8 +45,17 @@ public final class XPCProtectionServiceClient: NSObject, ProtectionServiceClient
     }
 
     private func configureConnection() {
-
         connection.remoteObjectInterface = NSXPCInterface(with: ProtectionServiceXPCProtocol.self)
+        connection.interruptionHandler = { [weak self] in
+            Task { @MainActor in
+                self?.markTransportUnavailable(detail: "Installed helper connection was interrupted before the XPC command completed.")
+            }
+        }
+        connection.invalidationHandler = { [weak self] in
+            Task { @MainActor in
+                self?.markTransportUnavailable(detail: "Installed helper connection was invalidated before the XPC command completed.")
+            }
+        }
         connection.resume()
 
         callbackSink.owner = self
@@ -108,17 +126,22 @@ public final class XPCProtectionServiceClient: NSObject, ProtectionServiceClient
             failureReason: .invalidConfiguration,
             status: status
         )
+        var transportFailed = false
 
         guard let proxy = connection.remoteObjectProxyWithErrorHandler({ error in
+            transportFailed = true
             outcome = ProtectionServiceCommandOutcome(
                 command: command,
                 accepted: false,
                 detail: "XPC request for \(command.rawValue) failed: \(error.localizedDescription)",
                 failureReason: .invalidConfiguration,
-                status: ProtectionStatusFactory.unavailable()
+                status: self.transportFailureStatus(
+                    detail: "Installed helper XPC request for \(command.rawValue) failed: \(error.localizedDescription)"
+                )
             )
             semaphore.signal()
         }) as? ProtectionServiceXPCProtocol else {
+            markTransportUnavailable(detail: "Installed helper XPC proxy could not be created for \(command.rawValue).")
             return outcome
         }
 
@@ -131,14 +154,57 @@ public final class XPCProtectionServiceClient: NSObject, ProtectionServiceClient
                     accepted: false,
                     detail: "Failed to decode XPC reply for \(command.rawValue): \(error.localizedDescription)",
                     failureReason: .invalidConfiguration,
-                    status: ProtectionStatusFactory.unavailable()
+                    status: self.transportFailureStatus(
+                        detail: "Installed helper XPC reply for \(command.rawValue) could not be decoded: \(error.localizedDescription)"
+                    )
                 )
             }
             semaphore.signal()
         }
 
-        semaphore.wait()
+        if semaphore.wait(timeout: .now() + requestTimeout) == .timedOut {
+            transportFailed = true
+            let detail = "Installed helper XPC request for \(command.rawValue) timed out after \(formattedTimeout()) second(s)."
+            outcome = ProtectionServiceCommandOutcome(
+                command: command,
+                accepted: false,
+                detail: detail,
+                failureReason: .installationNotReady,
+                status: transportFailureStatus(detail: detail)
+            )
+            connection.invalidate()
+        }
+
+        if transportFailed {
+            markTransportUnavailable(detail: outcome.detail)
+        } else {
+            isReachable = true
+            lastTransportFailureDetail = nil
+        }
+
         return outcome
+    }
+
+    private func transportFailureStatus(detail: String) -> ProtectionServiceStatusSnapshot {
+        var snapshot = status
+        snapshot.mode = helperExecutablePath == nil ? .inactive : .helperAvailable
+        snapshot.detail = detail
+        return snapshot
+    }
+
+    private func markTransportUnavailable(detail: String) {
+        isReachable = false
+        lastTransportFailureDetail = detail
+        status = transportFailureStatus(detail: detail)
+        helperExecutablePath = status.helperExecutablePath
+    }
+
+    private func formattedTimeout() -> String {
+        let rounded = (requestTimeout * 10).rounded() / 10
+        if rounded == rounded.rounded() {
+            return String(Int(rounded))
+        }
+        return String(format: "%.1f", rounded)
     }
 }
 

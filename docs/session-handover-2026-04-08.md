@@ -34,10 +34,19 @@ This note is the shortest reliable handoff for the next chat.
   - protected helper boundary now accepts a pluggable runtime controller, including the future live Endpoint Security runtime coordinator
   - runtime-start failure is surfaced through boundary outcomes/status
   - synchronous startup callbacks no longer risk deadlocking the endpoint queue
+  - stale or unreachable Mach-service helper paths no longer hang the app; the client times out and falls back cleanly
+  - LaunchAgent bootstrap errors are now treated as recoverable when the helper is already loaded and reusable
 - Batch 5 repo-side release hardening is complete:
   - checksum, helper-status, and provenance artifacts
   - optional codesign/notarization/stapling hooks
   - CI split into fast unit and slower packaging lanes
+  - alpha/beta prerelease publication to GitHub Releases
+  - release notes can embed real shipped-app screenshots from `docs/images`
+- support/readiness UX is materially improved:
+  - custom About window with copied diagnostics and direct GitHub issue links
+  - main-screen build/source/support diagnostics
+  - stronger Live Protection failure callouts
+  - dedicated History and Logs views backed by persisted snapshots and activity events
 
 ## Current product boundary
 
@@ -59,13 +68,14 @@ The repo already contains the runtime code that host should consume.
 
 These commands were run successfully on 2026-04-08:
 
+- `swift build --product drive-icon-guard-viewer`
 - `swift build --product drive-icon-guard-helper`
 - `swift test`
 - `./Tools/release/build-beta-app.sh`
 
 Latest full test count at handoff:
 
-- `81` passing tests
+- `83` passing tests
 
 ## Best next coding target
 
@@ -82,6 +92,8 @@ After that:
 
 1. validate the packaged app + installed helper path on a clean machine
 2. provision and validate real Apple signing/notary credentials in CI
+3. add helper version/update detection instead of relying only on reinstall
+4. tighten the operator UX with clearer logs/history surfacing and a top-level cleanup action for supported findings
 
 ## Files to open first in the next chat
 

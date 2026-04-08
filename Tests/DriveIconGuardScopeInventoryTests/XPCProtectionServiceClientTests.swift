@@ -113,6 +113,19 @@ func xpcProtectionServiceClientRejectsWhenInstallationIsNotReady() throws {
     #expect(client.status.detail.contains("blocked until installation is verified as installed"))
 }
 
+@Test
+@MainActor
+func xpcProtectionServiceClientMarksMissingMachServiceAsUnreachable() {
+    let client = XPCProtectionServiceClient(
+        machServiceName: "com.richardgeorgedavis.google-drive-icon-guard.tests.missing.\(UUID().uuidString)",
+        requestTimeout: 0.05
+    )
+
+    #expect(client.isReachable == false)
+    #expect(client.lastTransportFailureDetail != nil)
+    #expect(client.status.detail.contains("Installed helper"))
+}
+
 private func trustedXPCContext() -> ProtectionServiceAuthorizationContext {
     ProtectionServiceAuthorizationContext(
         callerBundleID: "com.richardgeorgedavis.google-drive-icon-guard.beta",
@@ -151,7 +164,13 @@ private func makeXPCResolver(root: URL) -> ProtectionInstallationStatusResolver 
     ProtectionInstallationStatusResolver(
         helperHostLocator: ProtectionHelperHostLocator(currentDirectoryPath: root.path),
         installerResourceLocator: ProtectionInstallerResourceLocator(currentDirectoryPath: root.path),
-        installationReceiptLocator: ProtectionInstallationReceiptLocator(currentDirectoryPath: root.path)
+        installationReceiptLocator: ProtectionInstallationReceiptLocator(
+            currentDirectoryPath: root.path,
+            registrationPaths: ProtectionServiceRegistrationPaths(
+                applicationSupportDirectory: root.appendingPathComponent("ApplicationSupport", isDirectory: true),
+                launchAgentsDirectory: root.appendingPathComponent("LaunchAgents", isDirectory: true)
+            )
+        )
     )
 }
 
@@ -318,6 +337,18 @@ final class XPCProtectionServiceClientTests: XCTestCase {
         XCTAssertEqual(client.status.installationState, .bundledOnly)
         XCTAssertTrue(client.status.detail.contains("blocked until installation is verified as installed"))
     }
+
+    @MainActor
+    func testXPCProtectionServiceClientMarksMissingMachServiceAsUnreachable() {
+        let client = XPCProtectionServiceClient(
+            machServiceName: "com.richardgeorgedavis.google-drive-icon-guard.tests.missing.\(UUID().uuidString)",
+            requestTimeout: 0.05
+        )
+
+        XCTAssertFalse(client.isReachable)
+        XCTAssertNotNil(client.lastTransportFailureDetail)
+        XCTAssertTrue(client.status.detail.contains("Installed helper"))
+    }
 }
 
 private func trustedXPCContext() -> ProtectionServiceAuthorizationContext {
@@ -358,7 +389,13 @@ private func makeXPCResolver(root: URL) -> ProtectionInstallationStatusResolver 
     ProtectionInstallationStatusResolver(
         helperHostLocator: ProtectionHelperHostLocator(currentDirectoryPath: root.path),
         installerResourceLocator: ProtectionInstallerResourceLocator(currentDirectoryPath: root.path),
-        installationReceiptLocator: ProtectionInstallationReceiptLocator(currentDirectoryPath: root.path)
+        installationReceiptLocator: ProtectionInstallationReceiptLocator(
+            currentDirectoryPath: root.path,
+            registrationPaths: ProtectionServiceRegistrationPaths(
+                applicationSupportDirectory: root.appendingPathComponent("ApplicationSupport", isDirectory: true),
+                launchAgentsDirectory: root.appendingPathComponent("LaunchAgents", isDirectory: true)
+            )
+        )
     )
 }
 

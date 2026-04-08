@@ -10,6 +10,7 @@ BUNDLE_ID="com.richardgeorgedavis.google-drive-icon-guard.beta"
 MINIMUM_MACOS_VERSION="13.0"
 RELEASE_VERSION="${RELEASE_VERSION:-0.1.0-beta}"
 RELEASE_BUILD_NUMBER="${RELEASE_BUILD_NUMBER:-1}"
+RELEASE_TAG="${RELEASE_TAG:-${RELEASE_VERSION}}"
 ARCHIVE_BASENAME="${ARCHIVE_BASENAME:-google-drive-icon-guard-beta-unsigned}"
 CODESIGN_IDENTITY="${CODESIGN_IDENTITY:-}"
 APP_CODESIGN_ENTITLEMENTS="${APP_CODESIGN_ENTITLEMENTS:-}"
@@ -37,6 +38,18 @@ ICON_SOURCE="${PROJECT_ROOT}/icon.png"
 ICON_BASENAME="AppIcon"
 ICONSET_PATH="${BUILD_ROOT}/${ICON_BASENAME}.iconset"
 ICON_ICNS_PATH="${APP_RESOURCES}/${ICON_BASENAME}.icns"
+GIT_COMMIT="$(git -C "${PROJECT_ROOT}" rev-parse HEAD 2>/dev/null || echo unknown)"
+GIT_REF="$(git -C "${PROJECT_ROOT}" describe --tags --always --dirty 2>/dev/null || echo unknown)"
+SIGNED_STATE="false"
+NOTARIZED_STATE="false"
+
+if [ -n "${CODESIGN_IDENTITY}" ]; then
+  SIGNED_STATE="true"
+fi
+
+if [ -n "${NOTARYTOOL_PROFILE}" ]; then
+  NOTARIZED_STATE="true"
+fi
 
 if [ -n "${NOTARYTOOL_PROFILE}" ] && [ -z "${CODESIGN_IDENTITY}" ]; then
   echo "NOTARYTOOL_PROFILE requires CODESIGN_IDENTITY." >&2
@@ -103,41 +116,25 @@ write_helper_status() {
 write_provenance() {
   local checksum_value
   local built_at_utc
-  local git_commit
-  local git_ref
   local git_branch
   local swift_version
   local developer_dir
-  local signed_state
-  local notarized_state
 
   checksum_value="$(awk '{print $1}' "${CHECKSUM_PATH}")"
   built_at_utc="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
-  git_commit="$(git -C "${PROJECT_ROOT}" rev-parse HEAD 2>/dev/null || echo unknown)"
-  git_ref="$(git -C "${PROJECT_ROOT}" describe --tags --always --dirty 2>/dev/null || echo unknown)"
   git_branch="$(git -C "${PROJECT_ROOT}" rev-parse --abbrev-ref HEAD 2>/dev/null || echo unknown)"
   swift_version="$(swift --version | head -n 1)"
   developer_dir="$(xcode-select -p)"
-  signed_state="false"
-  notarized_state="false"
-
-  if [ -n "${CODESIGN_IDENTITY}" ]; then
-    signed_state="true"
-  fi
-
-  if [ -n "${NOTARYTOOL_PROFILE}" ]; then
-    notarized_state="true"
-  fi
 
   CHECKSUM_VALUE="${checksum_value}" \
   BUILT_AT_UTC="${built_at_utc}" \
-  GIT_COMMIT="${git_commit}" \
-  GIT_REF="${git_ref}" \
+  GIT_COMMIT="${GIT_COMMIT}" \
+  GIT_REF="${GIT_REF}" \
   GIT_BRANCH="${git_branch}" \
   SWIFT_VERSION="${swift_version}" \
   DEVELOPER_DIR="${developer_dir}" \
-  SIGNED_STATE="${signed_state}" \
-  NOTARIZED_STATE="${notarized_state}" \
+  SIGNED_STATE="${SIGNED_STATE}" \
+  NOTARIZED_STATE="${NOTARIZED_STATE}" \
   python3 - <<'PY' > "${PROVENANCE_PATH}"
 import json
 import os
@@ -275,6 +272,18 @@ cat > "${APP_CONTENTS}/Info.plist" <<EOF
   <string>${RELEASE_VERSION}</string>
   <key>CFBundleVersion</key>
   <string>${RELEASE_BUILD_NUMBER}</string>
+  <key>DriveIconGuardReleaseTag</key>
+  <string>${RELEASE_TAG}</string>
+  <key>DriveIconGuardGitCommit</key>
+  <string>${GIT_COMMIT}</string>
+  <key>DriveIconGuardGitRef</key>
+  <string>${GIT_REF}</string>
+  <key>DriveIconGuardCodesigned</key>
+  <${SIGNED_STATE}/>
+  <key>DriveIconGuardNotarized</key>
+  <${NOTARIZED_STATE}/>
+  <key>DriveIconGuardCodesignIdentity</key>
+  <string>${CODESIGN_IDENTITY}</string>
   <key>LSMinimumSystemVersion</key>
   <string>${MINIMUM_MACOS_VERSION}</string>
   <key>NSHighResolutionCapable</key>

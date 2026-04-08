@@ -17,7 +17,8 @@ func betaRuntimeNormalizesBlockingScopesToAuditOnly() throws {
 
     let client = EmbeddedProtectionServiceClient(
         helperHostLocator: ProtectionHelperHostLocator(currentDirectoryPath: tempRoot.path),
-        installerResourceLocator: ProtectionInstallerResourceLocator(currentDirectoryPath: tempRoot.path)
+        installerResourceLocator: ProtectionInstallerResourceLocator(currentDirectoryPath: tempRoot.path),
+        installationReceiptLocator: makeReceiptLocator(root: tempRoot)
     )
 
     let scope = DriveManagedScope(
@@ -58,7 +59,8 @@ func embeddedPathDoesNotReportReadyEventSourceState() throws {
 
     let client = EmbeddedProtectionServiceClient(
         helperHostLocator: ProtectionHelperHostLocator(currentDirectoryPath: tempRoot.path),
-        installerResourceLocator: ProtectionInstallerResourceLocator(currentDirectoryPath: tempRoot.path)
+        installerResourceLocator: ProtectionInstallerResourceLocator(currentDirectoryPath: tempRoot.path),
+        installationReceiptLocator: makeReceiptLocator(root: tempRoot)
     )
 
     client.updateConfiguration(
@@ -78,7 +80,8 @@ func embeddedPathDoesNotReportReadyEventSourceState() throws {
 func installationStateIsUnavailableWhenNoHelperIsBundled() {
     let client = EmbeddedProtectionServiceClient(
         helperHostLocator: ProtectionHelperHostLocator(currentDirectoryPath: "/tmp/does-not-exist-\(UUID().uuidString)"),
-        installerResourceLocator: ProtectionInstallerResourceLocator(currentDirectoryPath: "/tmp/does-not-exist-\(UUID().uuidString)")
+        installerResourceLocator: ProtectionInstallerResourceLocator(currentDirectoryPath: "/tmp/does-not-exist-\(UUID().uuidString)"),
+        installationReceiptLocator: makeReceiptLocator(root: URL(fileURLWithPath: "/tmp/does-not-exist-\(UUID().uuidString)", isDirectory: true))
     )
 
     client.updateConfiguration(
@@ -101,7 +104,8 @@ func installationStateIsBundledOnlyWhenHelperExistsWithoutInstallerResources() t
     _ = try makeHelperExecutable(in: tempRoot)
     let client = EmbeddedProtectionServiceClient(
         helperHostLocator: ProtectionHelperHostLocator(currentDirectoryPath: tempRoot.path),
-        installerResourceLocator: ProtectionInstallerResourceLocator(currentDirectoryPath: tempRoot.path)
+        installerResourceLocator: ProtectionInstallerResourceLocator(currentDirectoryPath: tempRoot.path),
+        installationReceiptLocator: makeReceiptLocator(root: tempRoot)
     )
 
     client.updateConfiguration(
@@ -129,7 +133,8 @@ func installationStateIsInstallPlanReadyWhenHelperAndResourcesExist() throws {
 
     let client = EmbeddedProtectionServiceClient(
         helperHostLocator: ProtectionHelperHostLocator(currentDirectoryPath: tempRoot.path),
-        installerResourceLocator: ProtectionInstallerResourceLocator(currentDirectoryPath: tempRoot.path)
+        installerResourceLocator: ProtectionInstallerResourceLocator(currentDirectoryPath: tempRoot.path),
+        installationReceiptLocator: makeReceiptLocator(root: tempRoot)
     )
 
     client.updateConfiguration(
@@ -162,7 +167,7 @@ func installationStateIsInstalledWhenValidReceiptExists() throws {
     let client = EmbeddedProtectionServiceClient(
         helperHostLocator: ProtectionHelperHostLocator(currentDirectoryPath: tempRoot.path),
         installerResourceLocator: ProtectionInstallerResourceLocator(currentDirectoryPath: tempRoot.path),
-        installationReceiptLocator: ProtectionInstallationReceiptLocator(currentDirectoryPath: tempRoot.path)
+        installationReceiptLocator: makeReceiptLocator(root: tempRoot)
     )
 
     client.updateConfiguration(
@@ -195,7 +200,7 @@ func installationStateIsErrorWhenReceiptClaimsInstalledButHelperMismatchExists()
     let client = EmbeddedProtectionServiceClient(
         helperHostLocator: ProtectionHelperHostLocator(currentDirectoryPath: tempRoot.path),
         installerResourceLocator: ProtectionInstallerResourceLocator(currentDirectoryPath: tempRoot.path),
-        installationReceiptLocator: ProtectionInstallationReceiptLocator(currentDirectoryPath: tempRoot.path)
+        installationReceiptLocator: makeReceiptLocator(root: tempRoot)
     )
 
     client.updateConfiguration(
@@ -226,7 +231,7 @@ func installationStateIsErrorWhenReceiptIsMalformed() throws {
     let client = EmbeddedProtectionServiceClient(
         helperHostLocator: ProtectionHelperHostLocator(currentDirectoryPath: tempRoot.path),
         installerResourceLocator: ProtectionInstallerResourceLocator(currentDirectoryPath: tempRoot.path),
-        installationReceiptLocator: ProtectionInstallationReceiptLocator(currentDirectoryPath: tempRoot.path)
+        installationReceiptLocator: makeReceiptLocator(root: tempRoot)
     )
 
     client.updateConfiguration(
@@ -246,6 +251,16 @@ private func makeTempRoot() throws -> URL {
         .appendingPathComponent("embedded-protection-tests-\(UUID().uuidString)", isDirectory: true)
     try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
     return root
+}
+
+private func makeReceiptLocator(root: URL) -> ProtectionInstallationReceiptLocator {
+    ProtectionInstallationReceiptLocator(
+        currentDirectoryPath: root.path,
+        registrationPaths: ProtectionServiceRegistrationPaths(
+            applicationSupportDirectory: root.appendingPathComponent("ApplicationSupport", isDirectory: true),
+            launchAgentsDirectory: root.appendingPathComponent("LaunchAgents", isDirectory: true)
+        )
+    )
 }
 
 private func makeHelperExecutable(in root: URL) throws -> String {

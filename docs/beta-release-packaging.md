@@ -22,7 +22,7 @@ The repo now also includes a GitHub Release publication path for tester-facing a
 - tagged pushes for `alpha-*` and `beta-*` can publish prerelease assets directly under GitHub Releases
 - manual workflow dispatch can create or update a prerelease tag and publish the same assets without a pre-existing tag
 - release notes are generated from the built artifacts so the checksum, helper-status snapshot, and trust state stay aligned with the uploaded files
-- release preview images can be generated from the cached inventory snapshot and embedded in the release notes
+- release preview images can use captured app UI screenshots so the GitHub Release page matches the shipped build
 
 ## Current assumptions
 

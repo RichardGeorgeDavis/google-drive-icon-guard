@@ -330,7 +330,13 @@ private func makeResolver(root: URL) -> ProtectionInstallationStatusResolver {
     ProtectionInstallationStatusResolver(
         helperHostLocator: ProtectionHelperHostLocator(currentDirectoryPath: root.path),
         installerResourceLocator: ProtectionInstallerResourceLocator(currentDirectoryPath: root.path),
-        installationReceiptLocator: ProtectionInstallationReceiptLocator(currentDirectoryPath: root.path)
+        installationReceiptLocator: ProtectionInstallationReceiptLocator(
+            currentDirectoryPath: root.path,
+            registrationPaths: ProtectionServiceRegistrationPaths(
+                applicationSupportDirectory: root.appendingPathComponent("ApplicationSupport", isDirectory: true),
+                launchAgentsDirectory: root.appendingPathComponent("LaunchAgents", isDirectory: true)
+            )
+        )
     )
 }
 
@@ -738,7 +744,13 @@ private func makeResolver(root: URL) -> ProtectionInstallationStatusResolver {
     ProtectionInstallationStatusResolver(
         helperHostLocator: ProtectionHelperHostLocator(currentDirectoryPath: root.path),
         installerResourceLocator: ProtectionInstallerResourceLocator(currentDirectoryPath: root.path),
-        installationReceiptLocator: ProtectionInstallationReceiptLocator(currentDirectoryPath: root.path)
+        installationReceiptLocator: ProtectionInstallationReceiptLocator(
+            currentDirectoryPath: root.path,
+            registrationPaths: ProtectionServiceRegistrationPaths(
+                applicationSupportDirectory: root.appendingPathComponent("ApplicationSupport", isDirectory: true),
+                launchAgentsDirectory: root.appendingPathComponent("LaunchAgents", isDirectory: true)
+            )
+        )
     )
 }
 
