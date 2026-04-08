@@ -393,6 +393,62 @@ public struct ScopeRemediationApplyResult: Equatable, Sendable {
     }
 }
 
+public struct AggregateCleanupPreview: Equatable, Sendable {
+    public var generatedAt: Date
+    public var affectedScopeCount: Int
+    public var skippedScopeCount: Int
+    public var totalCandidateCount: Int
+    public var totalBytes: Int
+    public var readyScopePreviews: [ScopeRemediationPreview]
+    public var skippedScopeNames: [String]
+    public var warnings: [DiscoveryWarning]
+
+    public init(
+        generatedAt: Date = Date(),
+        affectedScopeCount: Int,
+        skippedScopeCount: Int,
+        totalCandidateCount: Int,
+        totalBytes: Int,
+        readyScopePreviews: [ScopeRemediationPreview],
+        skippedScopeNames: [String] = [],
+        warnings: [DiscoveryWarning] = []
+    ) {
+        self.generatedAt = generatedAt
+        self.affectedScopeCount = affectedScopeCount
+        self.skippedScopeCount = skippedScopeCount
+        self.totalCandidateCount = totalCandidateCount
+        self.totalBytes = totalBytes
+        self.readyScopePreviews = readyScopePreviews
+        self.skippedScopeNames = skippedScopeNames
+        self.warnings = warnings
+    }
+}
+
+public struct AggregateCleanupApplyResult: Equatable, Sendable {
+    public var processedScopeCount: Int
+    public var appliedScopeCount: Int
+    public var removedCount: Int
+    public var removedBytes: Int
+    public var results: [ScopeRemediationApplyResult]
+    public var warnings: [DiscoveryWarning]
+
+    public init(
+        processedScopeCount: Int,
+        appliedScopeCount: Int,
+        removedCount: Int,
+        removedBytes: Int,
+        results: [ScopeRemediationApplyResult],
+        warnings: [DiscoveryWarning] = []
+    ) {
+        self.processedScopeCount = processedScopeCount
+        self.appliedScopeCount = appliedScopeCount
+        self.removedCount = removedCount
+        self.removedBytes = removedBytes
+        self.results = results
+        self.warnings = warnings
+    }
+}
+
 public struct ScopeEnforcementEvent: Equatable, Sendable {
     public var scope: DriveManagedScope
     public var detectedArtefactCount: Int

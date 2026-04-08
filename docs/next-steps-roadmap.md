@@ -119,6 +119,14 @@ For a proper MVP beta that can truthfully claim prevention while the app is clos
 
 If that first item is not complete, keep the public beta claim at audit/review/helper-readiness rather than true prevention.
 
+If Apple Developer Program membership, entitlement approval, or signing budget is not available, do not keep describing Batch 3 as merely delayed. Treat it as blocked, and treat the fallback as a separate compromise lane:
+
+- installed helper runs in background while the app is closed
+- watcher/polling detects artefacts after write
+- helper performs narrow automatic cleanup in confirmed Drive-managed roots
+
+That fallback can support a "background cleanup" beta, but it is not a substitute for Endpoint Security auth-path enforcement.
+
 ### 60 days (harden + scale)
 
 - ship authenticated app-helper/service boundary with caller verification and method authorization
@@ -142,6 +150,13 @@ If that first item is not complete, keep the public beta claim at audit/review/h
 5. Add helper version drift detection so installed helpers can be upgraded intentionally
 6. Tighten operator readiness UX: clearer history/log filtering, recent-activity summary, and top-level supported cleanup action
 7. Then move to policy-profile expansion
+
+Fallback priority order if entitlement/signing work is blocked:
+
+1. implement a background watcher/post-write cleanup helper lane
+2. validate strict scope narrowing and artefact matching to reduce false positives
+3. keep public wording at cleanup/neutralization/background guard
+4. resume Batch 3 only when the Apple/Xcode entitlement lane is actually available
 
 ## Performance optimization track
 
@@ -183,9 +198,9 @@ If that first item is not complete, keep the public beta claim at audit/review/h
 - add a Protection Readiness view (entitlements, install, approval blockers)
 - add guided permission recovery and one-click troubleshooting exports
 - add clearer per-scope risk/recommendation wording for beta users
-- add helper version/update visibility plus an explicit `Update Helper` action when the installed helper is stale
-- add a compact recent-activity summary to the main screen so helper/install failures are visible without navigating to Logs
-- add a top-level `Run Cleanup` action for supported findings after the cleanup flow is finalized and tested
+- validate packaged-build helper drift detection and `Update Helper` behavior against reused, stale, and mismatched installed helpers
+- extend typed activity-log export/report surfaces now that helper, cleanup, protection, warning, and inventory categories are persisted
+- refine the aggregate `Run Cleanup` journey after tester feedback, especially around post-refresh result visibility and skipped-scope explanation
 
 ### Release and operations maturity
 

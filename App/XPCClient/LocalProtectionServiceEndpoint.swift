@@ -336,15 +336,18 @@ public final class LocalProtectionServiceEndpoint: @unchecked Sendable {
             mode = .helperAvailable
         }
 
-        return ProtectionServiceStatusSnapshot(
-            mode: mode,
-            activeProtectedScopeCount: protectedScopeCount,
-            detail: detail,
-            helperExecutablePath: helperPath,
-            eventSourceState: eventSourceStatus.state,
-            eventSourceDescription: eventSourceStatus.detail,
-            installationState: installationStatus.state,
-            installationDescription: installationStatus.detail
+        return ProtectionHelperBuildInfoResolver.augment(
+            ProtectionServiceStatusSnapshot(
+                mode: mode,
+                activeProtectedScopeCount: protectedScopeCount,
+                detail: detail,
+                helperExecutablePath: helperPath,
+                eventSourceState: eventSourceStatus.state,
+                eventSourceDescription: eventSourceStatus.detail,
+                installationState: installationStatus.state,
+                installationDescription: installationStatus.detail
+            ),
+            launchdStatus: nil
         )
     }
 

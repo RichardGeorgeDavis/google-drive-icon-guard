@@ -130,6 +130,25 @@ Right now the codebase can:
 
 It does **not** yet ship the real Endpoint Security host target, approved entitlement path, or final Google-Drive-only live blocking path needed for true closed-app prevention.
 
+## Call For Help
+
+The main blocker to real closed-app blocking is no longer basic app or helper code. It is the Apple platform gate around Endpoint Security.
+
+This project needs help from anyone who can contribute one of the following:
+
+- access to a paid Apple Developer Program team
+- help requesting or sponsoring the restricted `com.apple.developer.endpoint-security.client` entitlement
+- help setting up the signed macOS host app plus system extension target in Xcode
+- help validating the signed build and system-extension approval flow on a real Mac
+
+Without that Apple Developer Program and entitlement lane, the project can continue as an audit, cleanup, and background-helper beta, but it cannot truthfully ship real Google-Drive-only closed-app blocking.
+
+If you can help with that, please open an issue or get in touch through GitHub:
+
+- [Repository](https://github.com/RichardGeorgeDavis/google-drive-icon-guard)
+- [Issues](https://github.com/RichardGeorgeDavis/google-drive-icon-guard/issues)
+- [Support](./.github/SUPPORT.md)
+
 ## Test Builds
 
 Alpha and beta tester builds can now be published directly through GitHub Releases with the packaged zip, checksum, helper-status JSON, and provenance JSON attached to the release entry.

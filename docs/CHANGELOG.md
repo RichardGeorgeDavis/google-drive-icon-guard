@@ -21,10 +21,14 @@
 - added a custom About window with copied diagnostics, direct GitHub issue links, release/build trust state, and helper lifecycle details
 - added main-screen build/support diagnostics, stronger Live Protection recovery messaging, and direct support actions from the dashboard
 - replaced generated mock release/README imagery with real app screenshots and wired those captures into support docs and generated release notes
+- added helper build/version metadata in install receipts plus bundled/installed/running helper drift detection and an explicit `Update Helper` path
+- added typed activity-log categories and severity with backward-compatible decoding for older persisted logs
+- added first-class persisted helper/install failure logging, log filters, and a main-screen `Recent Activity` summary
+- added a top-level aggregate `Run Cleanup` flow for supported findings with preview/apply summaries
 
 ### Testing
 
-- added regression coverage for monitor stop behavior, ES callback mapping, runtime-lane session flow, install receipt handling, authorization rules, launchd lifecycle handling, stale Mach-service timeout handling, and bootstrap-failed-but-already-loaded helper reuse
+- added regression coverage for monitor stop behavior, ES callback mapping, runtime-lane session flow, install receipt handling, authorization rules, launchd lifecycle handling, stale Mach-service timeout handling, bootstrap-failed-but-already-loaded helper reuse, backward-compatible activity-log decoding, and helper version drift state resolution
 
 ### Documentation
 
@@ -32,6 +36,7 @@
 - added a dedicated development setup guide and an explicit beta support matrix for public docs
 - refreshed handover docs to make the Endpoint Security host/entitlement lane the primary next step for a proper prevention beta
 - refreshed README/support docs and release-note assets around the shipped app UI and support flow
+- refreshed current handover/roadmap docs to reflect that helper update detection, recent activity, filtered logs, and top-level supported cleanup are now implemented
 
 ## 2026-04-01
 

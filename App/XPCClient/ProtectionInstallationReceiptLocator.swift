@@ -7,19 +7,34 @@ public struct ProtectionInstallationReceipt: Codable, Equatable, Sendable {
     public var helperExecutablePath: String?
     public var machServiceName: String?
     public var launchAgentPlistPath: String?
+    public var helperVersion: String?
+    public var helperBuildNumber: String?
+    public var helperReleaseTag: String?
+    public var helperGitCommit: String?
+    public var installedAt: Date?
 
     public init(
         state: ProtectionInstallationState,
         detail: String,
         helperExecutablePath: String? = nil,
         machServiceName: String? = nil,
-        launchAgentPlistPath: String? = nil
+        launchAgentPlistPath: String? = nil,
+        helperVersion: String? = nil,
+        helperBuildNumber: String? = nil,
+        helperReleaseTag: String? = nil,
+        helperGitCommit: String? = nil,
+        installedAt: Date? = nil
     ) {
         self.state = state
         self.detail = detail
         self.helperExecutablePath = helperExecutablePath
         self.machServiceName = machServiceName
         self.launchAgentPlistPath = launchAgentPlistPath
+        self.helperVersion = helperVersion
+        self.helperBuildNumber = helperBuildNumber
+        self.helperReleaseTag = helperReleaseTag
+        self.helperGitCommit = helperGitCommit
+        self.installedAt = installedAt
     }
 }
 

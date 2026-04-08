@@ -15,6 +15,8 @@ Since this original handover was written, the repo has already moved beyond pure
 
 The main missing piece for a proper prevention beta is now the signed Xcode host and entitlement path for real Endpoint Security traffic. Read this document as product and architecture intent; use [endpoint-security-xcode-integration.md](./endpoint-security-xcode-integration.md), [next-steps-roadmap.md](./next-steps-roadmap.md), and [current-progress-handover.md](./current-progress-handover.md) for the active next-step plan.
 
+If that Apple entitlement lane is unavailable, the nearest fallback is a background post-write cleanup helper. That fallback is useful, but it is not equivalent to true process-aware prevention and should be described as cleanup/neutralization rather than blocking.
+
 ## Project summary
 
 Build a macOS product that identifies **all Google Drive-managed locations** on a Mac and applies **narrow, process-aware icon artefact prevention** only where it is safe and supported.
@@ -61,6 +63,8 @@ A simple:
 - repeat
 
 …will likely create a **loop**.
+
+That does not make reactive cleanup useless, but it does mean any fallback helper that watches and cleans artefacts after write should be treated as a compromise path, not the final architecture.
 
 ### 3. Scope detection from Google Drive config/state is useful, but not sufficient
 Reading Google Drive config/state can help identify:

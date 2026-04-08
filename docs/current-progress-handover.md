@@ -38,6 +38,12 @@ The repo is now a standalone Git repository with:
 - main-screen build/support diagnostics, stronger Live Protection error callouts, and direct support actions from the dashboard
 - real shipped-app screenshots wired into the README, support docs, and generated GitHub release notes
 - dedicated History and Logs views backed by persisted snapshot comparison and activity-log state
+- helper build/version metadata persisted with install receipts plus bundled/installed/running helper drift detection
+- an explicit `Update Helper` state/action when the installed helper is outdated or mismatched
+- typed activity categories/severity with backward-compatible persistence decoding for older logs
+- first-class helper/install failures persisted into the activity log instead of only transient UI text
+- main-screen `Recent Activity` summary plus log filtering by helper, cleanup, protection, and warnings
+- a top-level aggregate `Run Cleanup` flow for supported findings with dry-run preview and apply summary
 
 The project is still in **beta / active development**. It is not yet the final downloadable app release.
 
@@ -49,7 +55,7 @@ The latest local validation rerun on **2026-04-08** is green:
 - `swift build --product drive-icon-guard-helper`
 - `swift test`
 - `./Tools/release/build-beta-app.sh`
-- current full suite size at handoff: `83` passing tests
+- current full suite size at handoff: `87` passing tests
 
 ## What is implemented
 
@@ -82,6 +88,11 @@ The current implementation can:
 - centralize default protection status construction through shared `ProtectionStatusFactory`
 - expose copied support diagnostics, release/build metadata, and GitHub issue links from both the About window and the main app surface
 - present persisted snapshot history and operational activity logs as first-class views in the app
+- classify persisted activity by category/severity while continuing to load older activity-log entries cleanly
+- show a compact recent-activity summary on the dashboard so helper and cleanup failures are visible without navigating into Logs
+- filter the Logs view by helper, cleanup, protection, and warnings
+- detect helper build drift across bundled, installed, and running helper state and surface an explicit `Update Helper` action
+- prepare and apply aggregate cleanup across all supported scopes from the main dashboard
 - classify each discovered scope by:
   - drive mode
   - scope kind
@@ -225,11 +236,30 @@ This is still not the final signed host target. It is the repo-side runtime supp
 - additional implementation note:
   - callback extraction now assembles create/rename new-path values using directory + filename and should be validated against real ES callback payloads in the Xcode runtime lane.
 
+## If Apple entitlement work is not available yet
+
+There is one practical fallback path that can still move the product forward without the Apple Developer Program or the restricted Endpoint Security entitlement:
+
+- keep the installed LaunchAgent helper running in the background
+- watch only confirmed Google Drive-managed roots
+- detect file changes after they happen
+- trigger immediate cleanup/remediation for exact known artefact patterns such as `Icon\r` and `._*`
+
+That fallback can produce a useful "background guard" or "automatic cleanup" beta, but it is explicitly **not** equivalent to real prevention:
+
+- it is post-write cleanup, not deny-before-write enforcement
+- it cannot make a truthful Google-Drive-only writer claim
+- it remains vulnerable to recreation loops or timing races
+
+If that fallback is used, the product wording must stay at background cleanup/neutralization and must not claim true live blocking or process-aware prevention.
+
 ## Proper beta MVP from here
 
 If the beta promise is limited to audit, review, export, cleanup preview, and a background helper install path, the repo is close.
 
 If the beta promise is true Google-Drive-only prevention while the app is closed, the must-have next step is the real Endpoint Security host lane.
+
+If Apple entitlement/signing work is unavailable, the only credible near-term alternative is a background post-write cleanup helper. That is a separate product boundary and should be positioned as compromise behavior rather than equivalent prevention.
 
 Must-have before that stronger beta claim:
 
@@ -243,9 +273,9 @@ Still important, but secondary to that host-lane work:
 - real Apple signing/notary credentials in CI
 - clean-machine packaged install/bootstrap/reconnect validation
 - screenshots and public beta notes that match the shipped behavior exactly
-- helper version/update detection so stale installed helpers can be upgraded explicitly rather than only reinstalled generically
-- clearer operator logs/history filtering plus a compact recent-activity summary on the main screen
-- a top-level cleanup action that aggregates supported findings once the cleanup UX is finalized
+- packaged-build validation that the new helper drift/update state is accurate when the app is moved to `/Applications`
+- operator export/reporting improvements for the now-typed activity log and cleanup history
+- retaining aggregate cleanup result summaries after the post-cleanup refresh path, if that UX proves too transient in testing
 
 ## Testing and toolchain note
 
@@ -258,8 +288,14 @@ Local testing can be misleading on machines that use only Apple Command Line Too
 1. Finish the Xcode host/entitlement lane for real Endpoint Security callback traffic.
 2. Validate the packaged app + installed helper path on a clean machine after that live lane is in place.
 3. Provision and validate the real Apple signing/notary credentials used by the hardened release lane.
-4. Add helper version drift detection and an explicit `Update Helper` path.
-5. Tighten history/log UX and add a top-level cleanup action for supported findings.
+4. Switch the live monitoring lane from notify-only observation to auth-event handling with real allow/deny responses.
+5. Validate the new helper drift/update state, typed logs, and aggregate cleanup UX against packaged beta builds and real tester flows.
+
+If entitlement work is blocked for budget/account reasons, temporarily replace steps 1 and 4 with:
+
+1. implement a background watcher/post-write cleanup lane in the installed helper
+2. validate that lane only against narrow artefact rules in confirmed Drive-managed roots
+3. keep all public wording at cleanup/background guard rather than prevention
 
 ## Planned next-step execution (handover-ready)
 

@@ -20,6 +20,8 @@ final class ScopeInventoryViewModel: ObservableObject {
     @Published private(set) var protectionStatus = ProtectionStatusFactory.unavailable()
     @Published private(set) var remediationPreview: ScopeRemediationPreview?
     @Published private(set) var remediationApplyResult: ScopeRemediationApplyResult?
+    @Published private(set) var aggregateCleanupPreview: AggregateCleanupPreview?
+    @Published private(set) var aggregateCleanupApplyResult: AggregateCleanupApplyResult?
     @Published private(set) var isLoading = false
     @Published private(set) var isUpdatingHelperService = false
     @Published private(set) var errorMessage: String?
@@ -63,8 +65,17 @@ final class ScopeInventoryViewModel: ObservableObject {
             self.helperLifecycleMessage = resolution.fallbackDetail
         }
         bindProtectionClientEventHandler()
-        self.protectionStatus = self.protectionClient.status
+        self.protectionStatus = augmentedProtectionStatus(from: self.protectionClient.status)
         syncProtectionClient()
+        if let helperLifecycleMessage {
+            recordActivityEvent(
+                helperEvent(
+                    message: helperLifecycleMessage,
+                    rawEventType: "helper_startup_notice",
+                    severity: .warning
+                )
+            )
+        }
     }
 
     func refresh() {
@@ -101,6 +112,9 @@ final class ScopeInventoryViewModel: ObservableObject {
             historyComparison = comparison
             activityLog = nextActivityLog
             remediationPreview = nil
+            remediationApplyResult = nil
+            aggregateCleanupPreview = nil
+            aggregateCleanupApplyResult = nil
             pendingPermissionRetry = shouldQueuePermissionRetry(for: reportToDisplay)
             isLoading = false
             updateProtectionConfiguration(for: reportToDisplay)
@@ -119,6 +133,9 @@ final class ScopeInventoryViewModel: ObservableObject {
             historyComparison = nil
             activityLog = PersistedActivityLog()
             remediationPreview = nil
+            remediationApplyResult = nil
+            aggregateCleanupPreview = nil
+            aggregateCleanupApplyResult = nil
             pendingPermissionRetry = shouldQueuePermissionRetry(for: reportToDisplay)
             errorMessage = nil
             isLoading = false
@@ -155,6 +172,8 @@ final class ScopeInventoryViewModel: ObservableObject {
         activityLog = PersistedActivityLog()
         remediationPreview = nil
         remediationApplyResult = nil
+        aggregateCleanupPreview = nil
+        aggregateCleanupApplyResult = nil
         pendingPermissionRetry = false
         errorMessage = nil
         updateProtectionConfiguration(for: nil)
@@ -167,13 +186,23 @@ final class ScopeInventoryViewModel: ObservableObject {
 
     func refreshHelperServiceStatus() {
         guard !usesInjectedProtectionClient else {
-            protectionStatus = protectionClient.status
+            protectionStatus = augmentedProtectionStatus(from: protectionClient.status)
             return
         }
 
         helperServiceStatus = Self.currentHelperServiceStatus()
         rebuildProtectionClientIfNeeded()
         syncProtectionClient()
+
+        if let helperServiceStatus, !helperServiceStatus.isLoaded {
+            recordActivityEvent(
+                helperEvent(
+                    message: helperServiceStatus.detail,
+                    rawEventType: "helper_status_refresh_not_loaded",
+                    severity: .warning
+                )
+            )
+        }
     }
 
     func installAndStartHelperService() {
@@ -189,6 +218,13 @@ final class ScopeInventoryViewModel: ObservableObject {
         } catch {
             helperLifecycleMessage = "Failed to persist helper configuration before install: \(error.localizedDescription)"
             isUpdatingHelperService = false
+            recordActivityEvent(
+                helperEvent(
+                    message: helperLifecycleMessage ?? error.localizedDescription,
+                    rawEventType: "helper_install_configuration_failed",
+                    severity: .error
+                )
+            )
             return
         }
 
@@ -203,10 +239,24 @@ final class ScopeInventoryViewModel: ObservableObject {
                 isUpdatingHelperService = false
                 rebuildProtectionClientIfNeeded()
                 syncProtectionClient()
+                recordActivityEvent(
+                    helperEvent(
+                        message: deploymentResult.receipt.detail,
+                        rawEventType: deploymentResult.receipt.state == .installed ? "helper_install_completed" : "helper_install_failed",
+                        severity: deploymentResult.receipt.state == .installed ? .info : .error
+                    )
+                )
             } catch {
                 helperLifecycleMessage = "Failed to install or bootstrap the background helper: \(error.localizedDescription)"
                 isUpdatingHelperService = false
                 refreshHelperServiceStatus()
+                recordActivityEvent(
+                    helperEvent(
+                        message: helperLifecycleMessage ?? error.localizedDescription,
+                        rawEventType: "helper_install_failed",
+                        severity: .error
+                    )
+                )
             }
         }
     }
@@ -230,10 +280,24 @@ final class ScopeInventoryViewModel: ObservableObject {
                 isUpdatingHelperService = false
                 rebuildProtectionClientIfNeeded()
                 syncProtectionClient()
+                recordActivityEvent(
+                    helperEvent(
+                        message: launchdStatus.detail,
+                        rawEventType: "helper_remove_completed",
+                        severity: .info
+                    )
+                )
             } catch {
                 helperLifecycleMessage = "Failed to remove the installed background helper: \(error.localizedDescription)"
                 isUpdatingHelperService = false
                 refreshHelperServiceStatus()
+                recordActivityEvent(
+                    helperEvent(
+                        message: helperLifecycleMessage ?? error.localizedDescription,
+                        rawEventType: "helper_remove_failed",
+                        severity: .error
+                    )
+                )
             }
         }
     }
@@ -265,22 +329,23 @@ final class ScopeInventoryViewModel: ObservableObject {
     func prepareDryRunRemediation(for scope: DriveManagedScope) {
         let preview = service.dryRunRemediationPreview(for: scope)
         remediationPreview = preview
+        aggregateCleanupPreview = nil
+        aggregateCleanupApplyResult = nil
 
-        do {
-            try appendActivityEvent(
-                EventRecord(
-                    processSignature: refreshProcessSignature(),
-                    scopeID: scope.id,
-                    targetPath: scope.path,
-                    artefactType: preview.candidates.first?.artefactType ?? .unknown,
-                    decision: .auditOnly,
-                    aggregatedCount: preview.totalCandidateCount,
-                    rawEventType: "remediation_preview"
-                )
+        recordActivityEvent(
+            EventRecord(
+                processSignature: refreshProcessSignature(),
+                scopeID: scope.id,
+                targetPath: scope.path,
+                artefactType: preview.candidates.first?.artefactType ?? .unknown,
+                decision: .auditOnly,
+                aggregatedCount: preview.totalCandidateCount,
+                rawEventType: "remediation_preview",
+                message: preview.recommendedAction,
+                category: .cleanup,
+                severity: preview.status == .ready ? .info : .warning
             )
-        } catch {
-            // Keep preview available even if activity persistence fails.
-        }
+        )
     }
 
     func dryRunRemediationScript(for scope: DriveManagedScope) -> String {
@@ -295,25 +360,133 @@ final class ScopeInventoryViewModel: ObservableObject {
         let result = service.applyCleanup(for: scope)
         remediationApplyResult = result
         remediationPreview = nil
+        aggregateCleanupPreview = nil
+        aggregateCleanupApplyResult = nil
 
-        do {
-            try appendActivityEvent(
-                EventRecord(
-                    processSignature: refreshProcessSignature(),
-                    scopeID: scope.id,
-                    targetPath: scope.path,
-                    artefactType: .unknown,
-                    decision: .allow,
-                    aggregatedCount: max(result.removedCount, 1),
-                    rawEventType: "remediation_apply_\(result.status.rawValue)"
-                )
-            )
-        } catch {
-            // Keep the cleanup result visible even if activity persistence fails.
-        }
+        recordActivityEvent(cleanupEvent(for: result, rawEventType: "remediation_apply_\(result.status.rawValue)"))
 
         refresh()
         return result
+    }
+
+    func prepareAggregateCleanup() -> AggregateCleanupPreview? {
+        guard let report else {
+            return nil
+        }
+
+        let candidateScopeIDs = Set(
+            report.artefactInventory.scopeResults
+                .filter { $0.matchedArtefactCount > 0 }
+                .map(\.scopeID)
+        )
+        let supportedScopes = report.scopes.filter {
+            $0.supportStatus == .supported && candidateScopeIDs.contains($0.id)
+        }
+
+        var readyPreviews: [ScopeRemediationPreview] = []
+        var skippedScopeNames: [String] = []
+        var warnings: [DiscoveryWarning] = []
+
+        for scope in supportedScopes {
+            let preview = service.dryRunRemediationPreview(for: scope)
+            switch preview.status {
+            case .ready where preview.totalCandidateCount > 0:
+                readyPreviews.append(preview)
+            default:
+                skippedScopeNames.append(scope.displayName)
+                warnings.append(
+                    DiscoveryWarning(
+                        code: "aggregate_cleanup_skipped_\(preview.status.rawValue)",
+                        message: "\(scope.displayName) was skipped during aggregate cleanup preview because its remediation status was \(preview.status.rawValue)."
+                    )
+                )
+            }
+
+            warnings.append(contentsOf: preview.warnings)
+        }
+
+        let preview = AggregateCleanupPreview(
+            affectedScopeCount: readyPreviews.count,
+            skippedScopeCount: skippedScopeNames.count,
+            totalCandidateCount: readyPreviews.reduce(0) { $0 + $1.totalCandidateCount },
+            totalBytes: readyPreviews.reduce(0) { $0 + $1.totalBytes },
+            readyScopePreviews: readyPreviews,
+            skippedScopeNames: skippedScopeNames,
+            warnings: warnings
+        )
+
+        aggregateCleanupPreview = preview
+        aggregateCleanupApplyResult = nil
+        remediationPreview = nil
+        remediationApplyResult = nil
+
+        recordActivityEvent(
+            EventRecord(
+                processSignature: refreshProcessSignature(),
+                scopeID: nil,
+                targetPath: persistedPath ?? storageRootPath,
+                artefactType: .unknown,
+                decision: .auditOnly,
+                aggregatedCount: preview.totalCandidateCount,
+                rawEventType: "remediation_preview_all",
+                message: "Prepared aggregate cleanup preview across \(preview.affectedScopeCount) supported scope(s).",
+                category: .cleanup,
+                severity: preview.affectedScopeCount > 0 ? .info : .warning
+            )
+        )
+
+        for warning in warnings {
+            recordActivityEvent(warningEvent(warning, timestamp: preview.generatedAt))
+        }
+
+        return preview
+    }
+
+    func applyAggregateCleanup() -> AggregateCleanupApplyResult? {
+        guard let aggregateCleanupPreview, let report else {
+            return nil
+        }
+
+        let scopesByID = Dictionary(uniqueKeysWithValues: report.scopes.map { ($0.id, $0) })
+        var results: [ScopeRemediationApplyResult] = []
+        var warnings = aggregateCleanupPreview.warnings
+
+        for preview in aggregateCleanupPreview.readyScopePreviews {
+            guard let scope = scopesByID[preview.scopeID] else {
+                warnings.append(
+                    DiscoveryWarning(
+                        code: "aggregate_cleanup_missing_scope",
+                        message: "The scope \(preview.scopeDisplayName) was no longer available when aggregate cleanup was applied."
+                    )
+                )
+                continue
+            }
+
+            let result = service.applyCleanup(for: scope)
+            results.append(result)
+            warnings.append(contentsOf: result.warnings)
+            recordActivityEvent(cleanupEvent(for: result, rawEventType: "remediation_apply_all_\(result.status.rawValue)"))
+        }
+
+        let aggregateResult = AggregateCleanupApplyResult(
+            processedScopeCount: aggregateCleanupPreview.readyScopePreviews.count,
+            appliedScopeCount: results.filter { $0.status == .applied }.count,
+            removedCount: results.reduce(0) { $0 + $1.removedCount },
+            removedBytes: results.reduce(0) { $0 + $1.removedBytes },
+            results: results,
+            warnings: warnings
+        )
+
+        aggregateCleanupApplyResult = aggregateResult
+        remediationPreview = nil
+        remediationApplyResult = results.last
+        self.aggregateCleanupPreview = nil
+
+        if aggregateResult.removedCount > 0 && !isLoading {
+            refresh()
+        }
+
+        return aggregateResult
     }
 
     private func historyComparison(
@@ -347,7 +520,10 @@ final class ScopeInventoryViewModel: ObservableObject {
                 artefactType: .unknown,
                 decision: .auditOnly,
                 aggregatedCount: report.artefactInventory.totalArtefactCount,
-                rawEventType: "inventory_refresh"
+                rawEventType: "inventory_refresh",
+                message: "Recorded \(report.artefactInventory.totalArtefactCount) total artefact match(es) in the latest refresh.",
+                category: .inventory,
+                severity: .info
             )
         )
 
@@ -362,7 +538,10 @@ final class ScopeInventoryViewModel: ObservableObject {
                     artefactType: artefactType,
                     decision: .auditOnly,
                     aggregatedCount: scanResult.matchedArtefactCount,
-                    rawEventType: "scope_scan_result"
+                    rawEventType: "scope_scan_result",
+                    message: "Matched \(scanResult.matchedArtefactCount) artefact(s) at \(scanResult.scopePath).",
+                    category: .inventory,
+                    severity: .warning
                 )
             )
         }
@@ -378,10 +557,17 @@ final class ScopeInventoryViewModel: ObservableObject {
                         artefactType: .unknown,
                         decision: .auditOnly,
                         aggregatedCount: max(abs(change.artefactDelta), 1),
-                        rawEventType: "scope_history_\(change.changeKind.rawValue)"
+                        rawEventType: "scope_history_\(change.changeKind.rawValue)",
+                        message: "Detected a scope-level history change at \(change.scopePath).",
+                        category: .inventory,
+                        severity: .info
                     )
                 )
             }
+        }
+
+        for warning in combinedWarnings(for: report).prefix(12) {
+            events.append(warningEvent(warning, timestamp: report.generatedAt))
         }
 
         activityLog.events = Array(events.sorted { $0.timestamp > $1.timestamp }.prefix(200))
@@ -427,6 +613,13 @@ final class ScopeInventoryViewModel: ObservableObject {
             try configurationStore.persist(protectionConfiguration)
         } catch {
             helperLifecycleMessage = "Failed to persist background helper configuration: \(error.localizedDescription)"
+            recordActivityEvent(
+                helperEvent(
+                    message: helperLifecycleMessage ?? error.localizedDescription,
+                    rawEventType: "helper_configuration_persist_failed",
+                    severity: .error
+                )
+            )
         }
 
         protectionClient.updateConfiguration(protectionConfiguration)
@@ -440,7 +633,7 @@ final class ScopeInventoryViewModel: ObservableObject {
             protectionClient.evaluateNow()
         }
 
-        protectionStatus = protectionClient.status
+        protectionStatus = augmentedProtectionStatus(from: protectionClient.status)
     }
 
     private func bindProtectionClientEventHandler() {
@@ -475,6 +668,13 @@ final class ScopeInventoryViewModel: ObservableObject {
         protectionClient = resolution.client
         if let fallbackDetail = resolution.fallbackDetail {
             helperLifecycleMessage = fallbackDetail
+            recordActivityEvent(
+                helperEvent(
+                    message: fallbackDetail,
+                    rawEventType: "helper_transport_fallback",
+                    severity: .error
+                )
+            )
         }
         bindProtectionClientEventHandler()
     }
@@ -537,16 +737,19 @@ final class ScopeInventoryViewModel: ObservableObject {
                             isGoogleDriveRelated: false
                         ),
                         scopeID: event.scopeID,
-                        targetPath: event.scopePath,
-                        artefactType: .unknown,
-                        decision: event.removedCount > 0 ? .deny : .auditOnly,
-                        aggregatedCount: max(event.detectedArtefactCount, 1),
-                        rawEventType: "live_protection_\(event.status.rawValue)"
-                    )
+                    targetPath: event.scopePath,
+                    artefactType: .unknown,
+                    decision: event.removedCount > 0 ? .deny : .auditOnly,
+                    aggregatedCount: max(event.detectedArtefactCount, 1),
+                    rawEventType: "live_protection_\(event.status.rawValue)",
+                    message: event.message,
+                    category: .protection,
+                    severity: event.removedCount > 0 ? .warning : .info
                 )
-            } catch {
-                // Keep monitoring even if activity persistence fails.
-            }
+            )
+        } catch {
+            // Keep monitoring even if activity persistence fails.
+        }
         }
 
         if requiresRefresh && !isLoading {
@@ -562,5 +765,76 @@ final class ScopeInventoryViewModel: ObservableObject {
             displayName: "Google Drive Icon Guard",
             isGoogleDriveRelated: false
         )
+    }
+
+    private func augmentedProtectionStatus(from base: ProtectionServiceStatusSnapshot) -> ProtectionServiceStatusSnapshot {
+        ProtectionHelperBuildInfoResolver.augment(
+            base,
+            launchdStatus: helperServiceStatus,
+            receiptLocator: installationStatusResolver.installationReceiptLocator
+        )
+    }
+
+    private func recordActivityEvent(_ event: EventRecord) {
+        do {
+            try appendActivityEvent(event)
+        } catch {
+            // Keep UI state responsive even if activity persistence fails.
+        }
+    }
+
+    private func helperEvent(
+        message: String,
+        rawEventType: String,
+        severity: ActivitySeverity
+    ) -> EventRecord {
+        EventRecord(
+            processSignature: refreshProcessSignature(),
+                targetPath: helperServiceStatus?.serviceTarget ?? supportPathForHelperEvent(),
+                artefactType: .unknown,
+                decision: severity == .error ? .deny : .auditOnly,
+                aggregatedCount: 1,
+                rawEventType: rawEventType,
+                message: message,
+                category: .helper,
+                severity: severity
+        )
+    }
+
+    private func warningEvent(_ warning: DiscoveryWarning, timestamp: Date) -> EventRecord {
+        EventRecord(
+            timestamp: timestamp,
+            processSignature: refreshProcessSignature(),
+            targetPath: persistedPath ?? storageRootPath,
+            artefactType: .unknown,
+            decision: .auditOnly,
+            aggregatedCount: 1,
+            rawEventType: "warning_\(warning.code)",
+            message: warning.message,
+            category: .warning,
+            severity: warning.code.localizedCaseInsensitiveContains("permission") ? .error : .warning
+        )
+    }
+
+    private func cleanupEvent(
+        for result: ScopeRemediationApplyResult,
+        rawEventType: String
+    ) -> EventRecord {
+        EventRecord(
+            processSignature: refreshProcessSignature(),
+            scopeID: result.scopeID,
+            targetPath: result.scopePath,
+            artefactType: .unknown,
+            decision: result.removedCount > 0 ? .allow : .auditOnly,
+            aggregatedCount: max(result.removedCount, 1),
+            rawEventType: rawEventType,
+            message: result.message,
+            category: .cleanup,
+            severity: result.status == .partialFailure || result.status == .unreadable ? .warning : .info
+        )
+    }
+
+    private func supportPathForHelperEvent() -> String {
+        helperServiceStatus?.serviceTarget ?? storageRootPath
     }
 }

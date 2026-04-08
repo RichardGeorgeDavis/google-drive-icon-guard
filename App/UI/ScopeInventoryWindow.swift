@@ -46,12 +46,54 @@ private struct ActivityItem: Identifiable {
     let systemImage: String
     let tint: Color
     let timestamp: Date?
+    let category: ActivityCategory
+    let severity: ActivitySeverity
+    let scopePath: String?
+}
+
+private enum ActivityFilter: String, CaseIterable, Identifiable {
+    case all
+    case helper
+    case cleanup
+    case protection
+    case warnings
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .all:
+            return "All"
+        case .helper:
+            return "Helper"
+        case .cleanup:
+            return "Cleanup"
+        case .protection:
+            return "Protection"
+        case .warnings:
+            return "Warnings"
+        }
+    }
+
+    var category: ActivityCategory? {
+        switch self {
+        case .all:
+            return nil
+        case .helper:
+            return .helper
+        case .cleanup:
+            return .cleanup
+        case .protection:
+            return .protection
+        case .warnings:
+            return .warning
+        }
+    }
 }
 
 struct ScopeInventoryWindow: View {
     @AppStorage("scopeInventory.historyLimit") private var historyLimit = 6
     @AppStorage("scopeInventory.showSampleMatches") private var showSampleMatches = true
-    @AppStorage("scopeInventory.showWarningsInLogs") private var showWarningsInLogs = true
     @AppStorage("scopeInventory.liveProtectionEnabled") private var liveProtectionEnabled = true
 
     private let supportDiagnostics = AppSupportDiagnostics.current()
@@ -60,6 +102,7 @@ struct ScopeInventoryWindow: View {
     @State private var selectedScopeID: UUID?
     @State private var exportMessage: String?
     @State private var supportMessage: String?
+    @State private var activityFilter: ActivityFilter = .all
 
     var body: some View {
         NavigationSplitView {
@@ -143,6 +186,8 @@ struct ScopeInventoryWindow: View {
                 liveProtectionPanel
                 stats
                 journeySection
+                recentActivitySection
+                aggregateCleanupSection
                 permissionRetryNotice
                 inventoryReviewSection
                 warningsSection
@@ -197,6 +242,7 @@ struct ScopeInventoryWindow: View {
                     title: "Logs",
                     subtitle: "Review-oriented activity feed derived from scans, warnings, and snapshot history."
                 )
+                activityFilterSection
                 activityFeedSection
             }
             .padding(20)
@@ -324,14 +370,118 @@ struct ScopeInventoryWindow: View {
                 }
                 .disabled(viewModel.report == nil)
 
+                Button(aggregateCleanupButtonTitle) {
+                    startAggregateCleanupJourney()
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(!hasSupportedCleanupCandidates)
+
                 Button("Reveal App Data") {
                     revealStorageRoot()
                 }
+            }
+
+            Text(aggregateCleanupHelperText)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(16)
+        .background(.quaternary.opacity(0.35), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+
+    private var recentActivitySection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text("Recent Activity")
+                    .font(.headline)
+                Spacer()
+                Button("Open Logs") {
+                    selection = .logs
+                }
+            }
+
+            if !recentActivityItems.isEmpty {
+                VStack(spacing: 10) {
+                    ForEach(recentActivityItems) { item in
+                        VStack(alignment: .leading, spacing: 8) {
+                            HStack(alignment: .top) {
+                                Label(item.title, systemImage: item.systemImage)
+                                    .font(.subheadline.weight(.semibold))
+                                    .foregroundStyle(item.tint)
+                                Spacer()
+                                if let timestamp = item.timestamp {
+                                    Text(formattedTimestamp(timestamp))
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
+
+                            Text(item.detail)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+
+                            HStack(spacing: 12) {
+                                Button("Open Logs") {
+                                    selection = .logs
+                                }
+                                .buttonStyle(.link)
+
+                                if let scopePath = item.scopePath {
+                                    Button("Review Scope") {
+                                        reviewScope(atPath: scopePath)
+                                    }
+                                    .buttonStyle(.link)
+                                }
+                            }
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(14)
+                        .background(.quaternary.opacity(0.35), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    }
+                }
+            } else {
+                emptyState(
+                    title: "No recent activity",
+                    systemImage: "clock.badge.exclamationmark",
+                    description: "Helper, cleanup, and protection activity will appear here once the app has refreshed or taken action."
+                )
+            }
+        }
+    }
+
+    private var aggregateCleanupSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Supported Cleanup")
+                .font(.headline)
+
+            if let preview = viewModel.aggregateCleanupPreview {
+                aggregateCleanupPreviewPanel(preview)
+            } else if let result = viewModel.aggregateCleanupApplyResult {
+                aggregateCleanupResultPanel(result)
+            } else {
+                Text("Use Run Cleanup to prepare one dry-run summary across all supported scopes with current artefacts.")
+                    .foregroundStyle(.secondary)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(16)
         .background(.quaternary.opacity(0.35), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+
+    private var activityFilterSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Filter")
+                .font(.headline)
+
+            Picker("Activity Filter", selection: $activityFilter) {
+                ForEach(ActivityFilter.allCases) { filter in
+                    Text(filter.title)
+                        .tag(filter)
+                }
+            }
+            .pickerStyle(.segmented)
+        }
     }
 
     private var scopesSection: some View {
@@ -795,6 +945,101 @@ struct ScopeInventoryWindow: View {
         .background(.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
     }
 
+    private func aggregateCleanupPreviewPanel(_ preview: AggregateCleanupPreview) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                badge("preview ready", tint: .blue)
+                Spacer()
+                Text("\(preview.totalCandidateCount) candidate(s)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            HStack(spacing: 10) {
+                metadataLabel("Scopes", value: "\(preview.affectedScopeCount)")
+                metadataLabel("Skipped", value: "\(preview.skippedScopeCount)")
+                metadataLabel("Disk Impact", value: formattedByteCount(preview.totalBytes))
+            }
+            .font(.caption)
+            .foregroundStyle(.secondary)
+
+            if !preview.readyScopePreviews.isEmpty {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Ready scopes")
+                        .font(.subheadline.weight(.semibold))
+
+                    ForEach(preview.readyScopePreviews, id: \.scopeID) { scopePreview in
+                        HStack {
+                            Text(scopePreview.scopeDisplayName)
+                            Spacer()
+                            Text("\(scopePreview.totalCandidateCount) artefact(s)")
+                                .foregroundStyle(.secondary)
+                        }
+                        .font(.caption)
+                    }
+                }
+            }
+
+            if !preview.skippedScopeNames.isEmpty {
+                Text("Skipped: \(preview.skippedScopeNames.joined(separator: ", "))")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            if !preview.warnings.isEmpty {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Warnings")
+                        .font(.subheadline.weight(.semibold))
+
+                    ForEach(preview.warnings.prefix(6), id: \.code) { warning in
+                        Text("\(warning.code): \(warning.message)")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(14)
+        .background(.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+    }
+
+    private func aggregateCleanupResultPanel(_ result: AggregateCleanupApplyResult) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                badge(result.removedCount > 0 ? "cleanup applied" : "cleanup completed", tint: result.removedCount > 0 ? .green : .blue)
+                Spacer()
+                Text("\(result.processedScopeCount) scope(s)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            HStack(spacing: 10) {
+                metadataLabel("Scopes Applied", value: "\(result.appliedScopeCount)")
+                metadataLabel("Removed", value: "\(result.removedCount)")
+                metadataLabel("Disk Impact", value: formattedByteCount(result.removedBytes))
+            }
+            .font(.caption)
+            .foregroundStyle(.secondary)
+
+            if !result.results.isEmpty {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Per-scope results")
+                        .font(.subheadline.weight(.semibold))
+
+                    ForEach(result.results, id: \.scopeID) { scopeResult in
+                        Text("\(scopeResult.scopeDisplayName): \(scopeResult.message)")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(14)
+        .background(.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+    }
+
     private var historyComparisonSection: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text("Snapshot comparison")
@@ -952,9 +1197,9 @@ struct ScopeInventoryWindow: View {
             Text("Activity feed")
                 .font(.headline)
 
-            if !persistedActivityItems.isEmpty {
+            if !filteredActivityItems.isEmpty {
                 VStack(spacing: 10) {
-                    ForEach(persistedActivityItems) { item in
+                    ForEach(filteredActivityItems) { item in
                         VStack(alignment: .leading, spacing: 8) {
                             HStack(alignment: .top) {
                                 Label(item.title, systemImage: item.systemImage)
@@ -970,6 +1215,20 @@ struct ScopeInventoryWindow: View {
 
                             Text(item.detail)
                                 .foregroundStyle(.secondary)
+
+                            HStack(spacing: 12) {
+                                if let scopePath = item.scopePath {
+                                    Button("Review Scope") {
+                                        reviewScope(atPath: scopePath)
+                                    }
+                                    .buttonStyle(.link)
+                                }
+
+                                Button("Reveal Logs Context") {
+                                    selection = .logs
+                                }
+                                .buttonStyle(.link)
+                            }
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(14)
@@ -989,7 +1248,6 @@ struct ScopeInventoryWindow: View {
     private var settingsPanel: some View {
         VStack(alignment: .leading, spacing: 14) {
             Toggle("Show sample match paths in inventory cards", isOn: $showSampleMatches)
-            Toggle("Include warnings in the activity feed", isOn: $showWarningsInLogs)
             Toggle("Keep future helper protection armed", isOn: $liveProtectionEnabled)
 
             VStack(alignment: .leading, spacing: 8) {
@@ -1084,6 +1342,7 @@ struct ScopeInventoryWindow: View {
                 metadataLabel("Auto-Blocked Scopes", value: "\(viewModel.protectionStatus.activeProtectedScopeCount)")
                 badge(eventSourceStateLabel(viewModel.protectionStatus.eventSourceState), tint: eventSourceStateColor(viewModel.protectionStatus.eventSourceState))
                 badge(installationStateLabel(viewModel.protectionStatus.installationState), tint: installationStateColor(viewModel.protectionStatus.installationState))
+                badge("helper \(viewModel.protectionStatus.helperUpdateStatus.rawValue)", tint: helperUpdateStatusColor(viewModel.protectionStatus.helperUpdateStatus))
             }
             .font(.caption)
             .foregroundStyle(.secondary)
@@ -1093,6 +1352,10 @@ struct ScopeInventoryWindow: View {
                 .foregroundStyle(.secondary)
 
             Text(viewModel.protectionStatus.installationDescription)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            Text(viewModel.protectionStatus.helperUpdateDescription)
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
@@ -1134,8 +1397,10 @@ struct ScopeInventoryWindow: View {
                     .textSelection(.enabled)
             }
 
+            helperVersionSection
+
             HStack(spacing: 12) {
-                Button(viewModel.protectionStatus.installationState == .installed ? "Reinstall + Restart Helper" : "Install Background Helper") {
+                Button(primaryHelperInstallButtonTitle) {
                     viewModel.installAndStartHelperService()
                 }
                 .buttonStyle(.borderedProminent)
@@ -1569,8 +1834,50 @@ struct ScopeInventoryWindow: View {
         supportDiagnostics.notarizationStatus == "Notarized" ? .green : .orange
     }
 
+    private var primaryHelperInstallButtonTitle: String {
+        switch viewModel.protectionStatus.helperUpdateStatus {
+        case .outdated, .mismatch:
+            return "Update Helper"
+        case .current where viewModel.protectionStatus.installationState == .installed:
+            return "Reinstall + Restart Helper"
+        default:
+            return viewModel.protectionStatus.installationState == .installed ? "Reinstall + Restart Helper" : "Install Background Helper"
+        }
+    }
+
     private var helperRemovalButtonTitle: String {
         liveProtectionNeedsAttention ? "Disable + Remove Helper" : "Remove Installed Helper"
+    }
+
+    private var hasSupportedCleanupCandidates: Bool {
+        guard let report = viewModel.report else {
+            return false
+        }
+
+        let supportedScopeIDs = Set(report.scopes.filter { $0.supportStatus == .supported }.map(\.id))
+        return report.artefactInventory.scopeResults.contains {
+            $0.matchedArtefactCount > 0 && supportedScopeIDs.contains($0.scopeID)
+        }
+    }
+
+    private var aggregateCleanupButtonTitle: String {
+        if viewModel.aggregateCleanupPreview != nil {
+            return "Apply Cleanup"
+        }
+
+        return "Run Cleanup"
+    }
+
+    private var aggregateCleanupHelperText: String {
+        if let preview = viewModel.aggregateCleanupPreview {
+            return "Prepared aggregate cleanup preview for \(preview.affectedScopeCount) supported scope(s) and \(preview.totalCandidateCount) candidate artefact(s). Press Apply Cleanup to continue."
+        }
+
+        if hasSupportedCleanupCandidates {
+            return "Run Cleanup prepares a single dry-run summary across all supported scopes with current artefacts."
+        }
+
+        return "Run Cleanup becomes available when supported scopes have current cleanup candidates."
     }
 
     private var liveProtectionNeedsAttention: Bool {
@@ -1614,6 +1921,45 @@ struct ScopeInventoryWindow: View {
         return nil
     }
 
+    private var helperVersionSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            if let bundled = viewModel.protectionStatus.bundledHelperBuild {
+                helperBuildRow(title: "Bundled Helper", build: bundled)
+            }
+
+            if let installed = viewModel.protectionStatus.installedHelperBuild {
+                helperBuildRow(title: "Installed Helper", build: installed)
+            }
+
+            if let running = viewModel.protectionStatus.runningHelperBuild {
+                helperBuildRow(title: "Running Helper", build: running)
+            }
+        }
+    }
+
+    private func helperBuildRow(title: String, build: ProtectionHelperBuildInfo) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 10) {
+                metadataLabel(title, value: build.versionLine ?? "unknown")
+                if let releaseIdentity = build.releaseIdentityLine {
+                    Text(releaseIdentity)
+                        .font(.system(.caption, design: .monospaced))
+                        .foregroundStyle(.secondary)
+                        .textSelection(.enabled)
+                }
+            }
+            .font(.caption)
+            .foregroundStyle(.secondary)
+
+            if let executablePath = build.executablePath {
+                Text(executablePath)
+                    .font(.system(.caption, design: .monospaced))
+                    .foregroundStyle(.secondary)
+                    .textSelection(.enabled)
+            }
+        }
+    }
+
     private var snapshotComparisonIsStable: Bool {
         guard let comparison = viewModel.historyComparison else {
             return false
@@ -1638,34 +1984,41 @@ struct ScopeInventoryWindow: View {
         return report.scopes.first
     }
 
-    private var persistedActivityItems: [ActivityItem] {
+    private var allActivityItems: [ActivityItem] {
         let events = viewModel.activityLog.events.prefix(40)
 
-        var items = events.map { event in
+        return events.map { event in
             ActivityItem(
                 id: event.id.uuidString,
                 title: activityTitle(for: event),
                 detail: activityDetail(for: event),
                 systemImage: activityIcon(for: event),
                 tint: activityTint(for: event),
-                timestamp: event.timestamp
+                timestamp: event.timestamp,
+                category: event.category,
+                severity: event.severity,
+                scopePath: event.scopeID == nil ? nil : event.targetPath
             )
         }
+    }
 
-        if showWarningsInLogs, let report = viewModel.report {
-            items.append(contentsOf: combinedWarnings.prefix(8).enumerated().map { index, warning in
-                ActivityItem(
-                    id: "warning-\(index)-\(warning.code)",
-                    title: warning.code,
-                    detail: warning.message,
-                    systemImage: "exclamationmark.triangle",
-                    tint: .orange,
-                    timestamp: report.generatedAt
-                )
-            })
+    private var filteredActivityItems: [ActivityItem] {
+        guard let category = activityFilter.category else {
+            return allActivityItems
         }
 
-        return items
+        return allActivityItems.filter { $0.category == category }
+    }
+
+    private var recentActivityItems: [ActivityItem] {
+        Array(
+            allActivityItems
+                .sorted { lhs, rhs in
+                    severityRank(lhs.severity) > severityRank(rhs.severity)
+                        || (lhs.timestamp ?? .distantPast) > (rhs.timestamp ?? .distantPast)
+                }
+                .prefix(5)
+        )
     }
 
     private func artefactScanResult(for scope: DriveManagedScope) -> ScopeArtefactScanResult? {
@@ -1805,6 +2158,30 @@ struct ScopeInventoryWindow: View {
             return .orange
         case .unreadable:
             return .red
+        }
+    }
+
+    private func helperUpdateStatusColor(_ status: ProtectionHelperUpdateStatus) -> Color {
+        switch status {
+        case .current:
+            return .green
+        case .outdated:
+            return .orange
+        case .mismatch:
+            return .red
+        case .unknown:
+            return .secondary
+        }
+    }
+
+    private func severityRank(_ severity: ActivitySeverity) -> Int {
+        switch severity {
+        case .error:
+            return 3
+        case .warning:
+            return 2
+        case .info:
+            return 1
         }
     }
 
@@ -2044,6 +2421,24 @@ struct ScopeInventoryWindow: View {
         exportMessage = "Dry-run preview prepared for \(scope.displayName). Review the candidates below, then press Apply Cleanup again."
     }
 
+    private func startAggregateCleanupJourney() {
+        guard hasSupportedCleanupCandidates else {
+            exportMessage = "No supported cleanup candidates are available yet."
+            return
+        }
+
+        if viewModel.aggregateCleanupPreview != nil {
+            confirmAndApplyAggregateCleanup()
+            return
+        }
+
+        if let preview = viewModel.prepareAggregateCleanup(), preview.affectedScopeCount > 0 {
+            exportMessage = "Prepared cleanup preview for \(preview.affectedScopeCount) supported scope(s). Review the summary below, then press Apply Cleanup."
+        } else {
+            exportMessage = "No supported cleanup candidates remained after the aggregate dry-run preview."
+        }
+    }
+
     private func confirmAndApplyCleanup(for scope: DriveManagedScope) {
         guard let preview = selectedRemediationPreview(for: scope), preview.status == .ready else {
             exportMessage = "Prepare a dry-run preview before applying cleanup."
@@ -2063,6 +2458,30 @@ struct ScopeInventoryWindow: View {
 
         let result = viewModel.applyCleanup(for: scope)
         exportMessage = result.message
+    }
+
+    private func confirmAndApplyAggregateCleanup() {
+        guard let preview = viewModel.aggregateCleanupPreview else {
+            exportMessage = "Prepare an aggregate cleanup preview before applying cleanup."
+            return
+        }
+
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = "Apply cleanup across \(preview.affectedScopeCount) supported scope(s)?"
+        alert.informativeText = "This will permanently remove \(preview.totalCandidateCount) matched artefact file(s) using \(formattedByteCount(preview.totalBytes)). \(preview.skippedScopeCount) scope(s) will be skipped."
+        alert.addButton(withTitle: "Apply Cleanup")
+        alert.addButton(withTitle: "Cancel")
+
+        guard alert.runModal() == .alertFirstButtonReturn else {
+            return
+        }
+
+        if let result = viewModel.applyAggregateCleanup() {
+            exportMessage = "Aggregate cleanup processed \(result.processedScopeCount) scope(s) and removed \(result.removedCount) artefact(s)."
+        } else {
+            exportMessage = "Aggregate cleanup could not be applied."
+        }
     }
 
     private func confirmAndResetStoredData() {
@@ -2182,6 +2601,19 @@ struct ScopeInventoryWindow: View {
     }
 
     private func activityTitle(for event: EventRecord) -> String {
+        switch event.category {
+        case .helper:
+            return helperActivityTitle(for: event.rawEventType)
+        case .cleanup:
+            return cleanupActivityTitle(for: event.rawEventType)
+        case .protection:
+            return "Protection event"
+        case .warning:
+            return event.rawEventType.replacingOccurrences(of: "warning_", with: "")
+        case .inventory:
+            break
+        }
+
         switch event.rawEventType {
         case "inventory_refresh":
             return "Inventory refresh completed"
@@ -2195,6 +2627,10 @@ struct ScopeInventoryWindow: View {
     }
 
     private func activityDetail(for event: EventRecord) -> String {
+        if let message = event.message, !message.isEmpty {
+            return message
+        }
+
         switch event.rawEventType {
         case "inventory_refresh":
             return "Recorded \(event.aggregatedCount) total artefact match(es) in the latest refresh."
@@ -2208,6 +2644,19 @@ struct ScopeInventoryWindow: View {
     }
 
     private func activityIcon(for event: EventRecord) -> String {
+        switch event.category {
+        case .helper:
+            return event.severity == .error ? "wrench.and.screwdriver.fill" : "wrench.and.screwdriver"
+        case .cleanup:
+            return "trash"
+        case .protection:
+            return "shield.lefthalf.filled"
+        case .warning:
+            return "exclamationmark.triangle"
+        case .inventory:
+            break
+        }
+
         switch event.rawEventType {
         case "inventory_refresh":
             return "arrow.clockwise.circle"
@@ -2221,6 +2670,15 @@ struct ScopeInventoryWindow: View {
     }
 
     private func activityTint(for event: EventRecord) -> Color {
+        switch event.severity {
+        case .error:
+            return .red
+        case .warning:
+            return .orange
+        case .info:
+            break
+        }
+
         switch event.rawEventType {
         case "inventory_refresh":
             return .blue
@@ -2230,6 +2688,36 @@ struct ScopeInventoryWindow: View {
             return .purple
         default:
             return .secondary
+        }
+    }
+
+    private func helperActivityTitle(for rawEventType: String) -> String {
+        switch rawEventType {
+        case let value where value.contains("install"):
+            return "Helper install"
+        case let value where value.contains("remove"):
+            return "Helper removal"
+        case let value where value.contains("transport"):
+            return "Helper transport fallback"
+        case let value where value.contains("status_refresh"):
+            return "Helper status refresh"
+        default:
+            return "Helper lifecycle"
+        }
+    }
+
+    private func cleanupActivityTitle(for rawEventType: String) -> String {
+        switch rawEventType {
+        case "remediation_preview":
+            return "Cleanup preview prepared"
+        case "remediation_preview_all":
+            return "Aggregate cleanup preview prepared"
+        case let value where value.hasPrefix("remediation_apply_all_"):
+            return "Aggregate cleanup applied"
+        case let value where value.hasPrefix("remediation_apply_"):
+            return "Cleanup applied"
+        default:
+            return "Cleanup event"
         }
     }
 }

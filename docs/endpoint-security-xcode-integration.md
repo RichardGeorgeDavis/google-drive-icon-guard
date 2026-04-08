@@ -14,11 +14,15 @@ The repo already has:
 
 What it does **not** yet have is the real signed Xcode host target and entitlement path that can supply live Endpoint Security traffic. Until this guide is carried through in a real target, the product must stay positioned as audit-first beta behavior rather than true closed-app prevention.
 
+If you do not have Apple Developer Program membership or Apple has not approved the Endpoint Security entitlement for your team, this guide is blocked at the provisioning stage. In that situation, the only practical alternative is a background post-write cleanup helper, which is useful but not equivalent to true live blocking.
+
 ## Prerequisites
 
 - Apple Developer Program membership for the Endpoint Security entitlement.
 - A macOS app or (recommended for production) a **system extension** target that is approved for Endpoint Security.
 - This repository checked out; `swift build` succeeds.
+
+Without those prerequisites, you can still prototype host structure and runtime seams, but you cannot complete a real signed Endpoint Security enforcement lane.
 
 ## 1. Create an Xcode workspace
 
@@ -139,6 +143,16 @@ Treat this work as done only when all of the following are true:
 6. the installed helper boundary can stay armed through the closed-app path rather than only the embedded/test path
 
 Until then, keep the shipped product claim at audit/review/helper-readiness and not true prevention.
+
+## Non-ES fallback boundary
+
+If the team cannot yet carry the Apple entitlement lane, the fallback option is:
+
+- LaunchAgent helper stays installed and active while the app is closed
+- file-system watcher or polling detects artefacts after they are written
+- the helper runs narrow cleanup/remediation against exact known artefact patterns in confirmed Drive-managed roots
+
+That path can support a useful "background cleanup" beta, but it does not satisfy the acceptance criteria above and should not be described as true blocking or process-aware prevention.
 
 ## References
 

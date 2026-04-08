@@ -100,6 +100,7 @@ public enum ProtectionServiceInstallerError: LocalizedError {
 
 public struct ProtectionServiceInstaller {
     private let fileManager: FileManager
+    private let bundle: Bundle
     private let helperHostLocator: ProtectionHelperHostLocator
     private let registrationConfiguration: ProtectionServiceRegistrationConfiguration
     private let registrationPaths: ProtectionServiceRegistrationPaths
@@ -107,12 +108,14 @@ public struct ProtectionServiceInstaller {
 
     public init(
         fileManager: FileManager = .default,
+        bundle: Bundle = .main,
         helperHostLocator: ProtectionHelperHostLocator = ProtectionHelperHostLocator(),
         registrationConfiguration: ProtectionServiceRegistrationConfiguration = .beta,
         registrationPaths: ProtectionServiceRegistrationPaths = ProtectionServiceRegistrationPaths(),
         encoder: JSONEncoder = JSONEncoder()
     ) {
         self.fileManager = fileManager
+        self.bundle = bundle
         self.helperHostLocator = helperHostLocator
         self.registrationConfiguration = registrationConfiguration
         self.registrationPaths = registrationPaths
@@ -134,7 +137,12 @@ public struct ProtectionServiceInstaller {
             detail: "LaunchAgent registration was written to \(launchAgentPlistURL.path). Bootstrap/start still depends on launchd lifecycle and user approval.",
             helperExecutablePath: resolvedHelperPath,
             machServiceName: registrationConfiguration.machServiceName,
-            launchAgentPlistPath: launchAgentPlistURL.path
+            launchAgentPlistPath: launchAgentPlistURL.path,
+            helperVersion: bundle.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String,
+            helperBuildNumber: bundle.object(forInfoDictionaryKey: "CFBundleVersion") as? String,
+            helperReleaseTag: infoString("DriveIconGuardReleaseTag"),
+            helperGitCommit: infoString("DriveIconGuardGitCommit"),
+            installedAt: Date()
         )
         try persistReceipt(receipt)
         return receipt
@@ -194,5 +202,13 @@ public struct ProtectionServiceInstaller {
     public func persistReceipt(_ receipt: ProtectionInstallationReceipt) throws {
         let data = try encoder.encode(receipt)
         try data.write(to: registrationPaths.receiptURL)
+    }
+
+    private func infoString(_ key: String) -> String? {
+        guard let value = bundle.object(forInfoDictionaryKey: key) as? String,
+              !value.isEmpty else {
+            return nil
+        }
+        return value
     }
 }
