@@ -2,6 +2,25 @@
 
 <img src="icon.png" alt="Google Drive Icon Guard icon" width="128" />
 
+## Call For Help
+
+The main blocker to real closed-app blocking is no longer basic app or helper code. It is the Apple platform gate around Endpoint Security.
+
+This project needs help from anyone who can contribute one of the following:
+
+- access to a paid Apple Developer Program team
+- help requesting or sponsoring the restricted `com.apple.developer.endpoint-security.client` entitlement
+- help setting up the signed macOS host app plus system extension target in Xcode
+- help validating the signed build and system-extension approval flow on a real Mac
+
+Without that Apple Developer Program and entitlement lane, the project can continue as an audit, cleanup, and background-helper beta, but it cannot truthfully ship real Google-Drive-only closed-app blocking.
+
+If you can help with that, please open an issue or get in touch through GitHub:
+
+- [Repository](https://github.com/RichardGeorgeDavis/google-drive-icon-guard)
+- [Issues](https://github.com/RichardGeorgeDavis/google-drive-icon-guard/issues)
+- [Support](./.github/SUPPORT.md)
+
 Google Drive Icon Guard is a macOS utility aimed at stopping Google Drive from generating invisible icon files across synced locations.
 
 The current beta does that conservatively for now: it discovers Google Drive-managed locations, scans those scopes in audit-only mode for hidden icon artefacts, and includes the first helper/runtime scaffolding needed before narrow prevention can be turned on safely.
@@ -129,25 +148,6 @@ Right now the codebase can:
 - open a lightweight SwiftUI app shell for discovered scopes via `swift run drive-icon-guard-viewer`
 
 It does **not** yet ship the real Endpoint Security host target, approved entitlement path, or final Google-Drive-only live blocking path needed for true closed-app prevention.
-
-## Call For Help
-
-The main blocker to real closed-app blocking is no longer basic app or helper code. It is the Apple platform gate around Endpoint Security.
-
-This project needs help from anyone who can contribute one of the following:
-
-- access to a paid Apple Developer Program team
-- help requesting or sponsoring the restricted `com.apple.developer.endpoint-security.client` entitlement
-- help setting up the signed macOS host app plus system extension target in Xcode
-- help validating the signed build and system-extension approval flow on a real Mac
-
-Without that Apple Developer Program and entitlement lane, the project can continue as an audit, cleanup, and background-helper beta, but it cannot truthfully ship real Google-Drive-only closed-app blocking.
-
-If you can help with that, please open an issue or get in touch through GitHub:
-
-- [Repository](https://github.com/RichardGeorgeDavis/google-drive-icon-guard)
-- [Issues](https://github.com/RichardGeorgeDavis/google-drive-icon-guard/issues)
-- [Support](./.github/SUPPORT.md)
 
 ## Test Builds
 
