@@ -6,15 +6,18 @@ public struct ScopeRemediationPlanner {
     private let fileManager: FileManager
     private let rules: [ArtefactRule]
     private let previewLimit: Int
+    private let protectedRootPrefixes: [String]
 
     public init(
         fileManager: FileManager = .default,
         rules: [ArtefactRule] = ArtefactScanner.defaultRules,
-        previewLimit: Int = 50
+        previewLimit: Int = 50,
+        protectedRootPrefixes: [String] = ["/", "/System", "/Library"]
     ) {
         self.fileManager = fileManager
         self.rules = rules
         self.previewLimit = max(1, previewLimit)
+        self.protectedRootPrefixes = protectedRootPrefixes
     }
 
     public func dryRunPreview(for scope: DriveManagedScope) -> ScopeRemediationPreview {
@@ -47,7 +50,18 @@ public struct ScopeRemediationPlanner {
             )
         }
 
-        let enumeration = enumerateCandidates(for: scope)
+        guard let validatedRootURL = validatedScopeRootURL(for: scope.path) else {
+            return ScopeRemediationPreview(
+                scopeID: scope.id,
+                scopeDisplayName: scope.displayName,
+                scopePath: scope.path,
+                status: .unreadable,
+                recommendedAction: "The scope path is not inside an allowed remediation root, so dry-run cleanup was blocked.",
+                warnings: [invalidScopePathWarning(path: scope.path)]
+            )
+        }
+
+        let enumeration = enumerateCandidates(for: scope, validatedRootURL: validatedRootURL)
 
         if enumeration.totalCount == 0 {
             return ScopeRemediationPreview(
@@ -96,11 +110,13 @@ public struct ScopeRemediationPlanner {
             return lines.joined(separator: "\n")
         }
 
-        let enumeration = enumerateCandidates(for: scope)
+        let candidates = preview.previewTruncated
+            ? enumerateCandidates(for: scope, validatedRootURL: validatedScopeRootURL(for: scope.path) ?? URL(fileURLWithPath: scope.path, isDirectory: true)).allCandidates
+            : preview.candidates
         lines.append("echo \"Dry-run only. No files will be removed.\"")
         lines.append("")
 
-        for candidate in enumeration.allCandidates {
+        for candidate in candidates {
             let escapedPath = shellEscape(candidate.path)
             lines.append("printf 'Would remove: %s\\n' \(escapedPath)")
         }
@@ -138,7 +154,18 @@ public struct ScopeRemediationPlanner {
             )
         }
 
-        let enumeration = enumerateCandidates(for: scope)
+        guard let validatedRootURL = validatedScopeRootURL(for: scope.path) else {
+            return ScopeRemediationApplyResult(
+                scopeID: scope.id,
+                scopeDisplayName: scope.displayName,
+                scopePath: scope.path,
+                status: .unavailable,
+                message: "Cleanup was blocked because the scope path is outside the allowed remediation roots.",
+                warnings: [invalidScopePathWarning(path: scope.path)]
+            )
+        }
+
+        let enumeration = enumerateCandidates(for: scope, validatedRootURL: validatedRootURL)
         if enumeration.totalCount == 0 {
             return ScopeRemediationApplyResult(
                 scopeID: scope.id,
@@ -156,6 +183,18 @@ public struct ScopeRemediationPlanner {
 
         for candidate in enumeration.allCandidates {
             do {
+                guard isPathWithinScopeRoot(candidate.path, rootURL: validatedRootURL) else {
+                    warnings.append(
+                        FileAccessGuidance.warning(
+                            operationCode: "remediation_path_outside_scope",
+                            path: candidate.path,
+                            error: NSError(domain: NSPOSIXErrorDomain, code: Int(EPERM)),
+                            genericMessage: "Cleanup skipped \(candidate.path) because it resolved outside the allowed scope root."
+                        )
+                    )
+                    continue
+                }
+
                 try fileManager.removeItem(atPath: candidate.path)
                 removedCount += 1
                 removedBytes += candidate.sizeBytes
@@ -198,7 +237,7 @@ public struct ScopeRemediationPlanner {
         )
     }
 
-    private func enumerateCandidates(for scope: DriveManagedScope) -> (
+    private func enumerateCandidates(for scope: DriveManagedScope, validatedRootURL rootURL: URL) -> (
         allCandidates: [RemediationCandidate],
         previewCandidates: [RemediationCandidate],
         totalCount: Int,
@@ -206,7 +245,6 @@ public struct ScopeRemediationPlanner {
         previewTruncated: Bool,
         warnings: [DiscoveryWarning]
     ) {
-        let rootURL = URL(fileURLWithPath: scope.path, isDirectory: true)
         var warnings: [DiscoveryWarning] = []
         var allCandidates: [RemediationCandidate] = []
         var previewCandidates: [RemediationCandidate] = []
@@ -349,5 +387,38 @@ public struct ScopeRemediationPlanner {
 
     private func shellEscape(_ path: String) -> String {
         "'" + path.replacingOccurrences(of: "'", with: "'\\''") + "'"
+    }
+
+    private func validatedScopeRootURL(for path: String) -> URL? {
+        let resolved = URL(fileURLWithPath: path, isDirectory: true).resolvingSymlinksInPath().standardizedFileURL.path
+        guard !resolved.isEmpty else {
+            return nil
+        }
+
+        if resolved == "/" {
+            return nil
+        }
+
+        for prefix in protectedRootPrefixes where resolved == prefix || resolved.hasPrefix(prefix + "/") {
+            return nil
+        }
+
+        return URL(fileURLWithPath: resolved, isDirectory: true)
+    }
+
+    private func isPathWithinScopeRoot(_ candidatePath: String, rootURL: URL) -> Bool {
+        let resolvedCandidate = URL(fileURLWithPath: candidatePath).resolvingSymlinksInPath().standardizedFileURL.path
+        let rootPath = rootURL.standardizedFileURL.path
+        let normalizedRoot = rootPath.hasSuffix("/") ? rootPath : rootPath + "/"
+        return resolvedCandidate == rootPath || resolvedCandidate.hasPrefix(normalizedRoot)
+    }
+
+    private func invalidScopePathWarning(path: String) -> DiscoveryWarning {
+        FileAccessGuidance.warning(
+            operationCode: "remediation_scope_disallowed",
+            path: path,
+            error: NSError(domain: NSPOSIXErrorDomain, code: Int(EPERM)),
+            genericMessage: "Cleanup blocked for disallowed scope root: \(path)"
+        )
     }
 }

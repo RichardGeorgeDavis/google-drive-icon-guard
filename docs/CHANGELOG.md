@@ -1,5 +1,25 @@
 # Changelog
 
+## 2026-04-08
+
+### Implemented
+
+- added receipt-backed install verification for `installed` and `error` helper state reporting
+- added typed caller/command authorization primitives for future helper-bound control surfaces
+- added a SwiftPM runtime-support lane for live Endpoint Security session wiring in an Xcode host
+- added release packaging provenance output plus optional codesign/notarization/stapling hooks
+- split CI into fast unit coverage and slower packaging-smoke/release lanes
+- added anonymous and Mach-service NSXPC helper boundary paths plus launch-agent/receipt installation support
+- added launchctl bootstrap/kickstart/bootout/status lifecycle support plus helper CLI deployment commands for the packaged LaunchAgent path
+
+### Testing
+
+- added regression coverage for monitor stop behavior, ES callback mapping, runtime-lane session flow, install receipt handling, authorization rules, and launchd lifecycle handling
+
+### Documentation
+
+- refreshed handover, roadmap, release packaging, and launch-checklist docs to match the new runtime/install/release boundaries, including helper launchd lifecycle support
+
 ## 2026-04-01
 
 ### Implemented

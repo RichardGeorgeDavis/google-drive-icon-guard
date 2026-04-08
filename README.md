@@ -34,14 +34,22 @@ Planned components:
 
 The current public beta now bundles a standalone helper host binary plus installer scaffold resources, but it still does **not** ship the final installed helper/service or system-extension registration flow. Live Google-Drive-only blocking remains pending real macOS process-attributed events.
 
+The repo now also includes a runtime-support library for an Xcode-hosted live Endpoint Security lane:
+
+- `DriveIconGuardRuntimeSupport`
+- `EndpointSecurityRuntimeCoordinator`
+- dynamic framework loading for real `es_new_client` / subscription wiring without requiring SwiftPM to link `EndpointSecurity.framework`
+
 ## Beta Release Format
 
 The repo now includes a practical beta packaging path for a downloadable macOS app.
 
 Current beta packaging:
 
-- unsigned `.app` bundle
+- unsigned-by-default `.app` bundle
+- optional codesign + notarization path when release credentials are provided
 - zipped beta archive for download
+- helper status and provenance JSON emitted alongside the archive
 - built from the current SwiftUI app shell
 - bundles the viewer plus a standalone helper host binary
 - packages helper install-plan scaffold resources
@@ -50,6 +58,15 @@ Current beta packaging:
 Build it locally with:
 
 ```bash
+./Tools/release/build-beta-app.sh
+```
+
+Optional release-hardening inputs:
+
+```bash
+CODESIGN_IDENTITY="Developer ID Application: Example, Inc. (TEAMID)"
+NOTARYTOOL_PROFILE="google-drive-icon-guard-notary"
+CMS_SIGN_IDENTITY="Developer ID Application: Example, Inc. (TEAMID)"
 ./Tools/release/build-beta-app.sh
 ```
 
@@ -85,6 +102,12 @@ Right now the codebase can:
 - open a lightweight SwiftUI app shell for discovered scopes via `swift run drive-icon-guard-viewer`
 
 It does **not** yet ship a real installed helper, live Endpoint Security event source, or the final Google-Drive-only blocking path.
+
+What is now in place for the next stage:
+
+- a runtime-support coordinator that combines the helper policy engine, ES subscriber, and live-session wiring
+- an Xcode integration guide for using that coordinator in a signed host target
+- tests covering live-session success, failure, and callback-to-policy flow in the runtime lane
 
 ## Quick Start
 
@@ -148,6 +171,7 @@ google-drive-icon-guard/
 │   ├── Settings/
 │   └── XPCClient/
 ├── Helper/
+├── RuntimeHostSupport/
 ├── Shared/
 │   ├── Models/
 │   ├── IPC/

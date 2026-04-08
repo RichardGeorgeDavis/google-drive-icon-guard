@@ -6,11 +6,13 @@ This repo now includes a concrete beta packaging path for the current SwiftUI ap
 
 The current beta packaging target is:
 
-- an **unsigned** `.app` bundle
+- an unsigned-by-default `.app` bundle
+- an optional signed/notarized archive when release credentials are configured
 - zipped as a downloadable archive
 - built from the `drive-icon-guard-viewer` SwiftUI target
 - bundles a standalone `drive-icon-guard-helper` executable under `Contents/Helpers/`
 - packages installer scaffold resources under `Contents/Resources/Installer/`
+- emits helper-status and provenance JSON alongside the archive
 - does not yet install or register a real helper/service or system extension
 
 This is a practical first beta format, not the final release/distribution model.
@@ -18,11 +20,14 @@ This is a practical first beta format, not the final release/distribution model.
 ## Current assumptions
 
 - minimum macOS version: `13.0`
-- current beta status: **unsigned**
-- current notarization status: **not notarized**
+- current default beta status: **unsigned**
+- current default notarization status: **not notarized**
 - current packaging output:
   - `dist/Google Drive Icon Guard.app`
   - `dist/google-drive-icon-guard-beta-unsigned.zip`
+  - `dist/google-drive-icon-guard-beta-unsigned.zip.sha256`
+  - `dist/google-drive-icon-guard-beta-unsigned.helper-status.json`
+  - `dist/google-drive-icon-guard-beta-unsigned.provenance.json`
   - `dist/Google Drive Icon Guard.app/Contents/Helpers/drive-icon-guard-helper`
   - `dist/Google Drive Icon Guard.app/Contents/Resources/Installer/ServiceRegistration/`
 
@@ -31,6 +36,18 @@ This is a practical first beta format, not the final release/distribution model.
 Use:
 
 ```bash
+./Tools/release/build-beta-app.sh
+```
+
+Optional hardened release inputs:
+
+```bash
+ARCHIVE_BASENAME=google-drive-icon-guard-beta-release
+RELEASE_VERSION=0.1.0-beta.2
+RELEASE_BUILD_NUMBER=42
+CODESIGN_IDENTITY="Developer ID Application: Example, Inc. (TEAMID)"
+NOTARYTOOL_PROFILE=google-drive-icon-guard-notary
+CMS_SIGN_IDENTITY="Developer ID Application: Example, Inc. (TEAMID)"
 ./Tools/release/build-beta-app.sh
 ```
 
@@ -44,6 +61,10 @@ What it does:
 - places the helper host in `Contents/Helpers/`
 - copies installer scaffold resources into `Contents/Resources/Installer/`
 - creates a zip archive for distribution
+- writes `helper-status` JSON for the packaged helper
+- writes a provenance JSON manifest with git/build/checksum metadata
+- optionally signs the app/helper and notarizes the bundle when credentials are supplied
+- optionally emits a CMS-signed provenance file when `CMS_SIGN_IDENTITY` is supplied
 
 What it does **not** do yet:
 
@@ -53,24 +74,33 @@ What it does **not** do yet:
 
 ## First beta install expectations
 
-Because the app is currently unsigned and not notarized:
+Because the default local build is still unsigned and not notarized:
 
 - Gatekeeper may warn on first launch
 - users may need to right-click and choose `Open`
 - this should be documented clearly in any release notes
 
-## Recommended next release improvements
+## CI and verification lanes
 
-- choose a real bundle identifier/versioning strategy
-- decide when to sign the beta app
-- decide when to notarize public builds
+The repo now splits release validation into two lanes:
+
+- `Swift Package CI` runs fast unit coverage everywhere and runs an unsigned packaging smoke build on `main` or manual dispatch
+- `Build Beta App` runs the full release packaging lane for beta tags or manual dispatch, including optional signing/notarization/provenance outputs
+
+## Remaining release work outside the repo
+
+- import the real Developer ID certificate into CI or the maintainer keychain
+- configure the `notarytool` keychain profile used by the release lane
+- decide whether the provenance CMS signature should use the same identity or a dedicated signing identity
+- attach the hardened archive plus provenance outputs to GitHub Releases
 - add screenshots to the GitHub release notes
-- attach the built zip to GitHub Releases
 
 ## GitHub workflow
 
-The repo also includes a manual GitHub Actions workflow for building the beta app artifact in CI.
+The repo now includes:
 
-That workflow has now been run successfully on `main`, confirming that CI can produce the current unsigned beta archive.
+- a fast Swift Package CI workflow
+- a slower beta-package smoke lane for packaging verification
+- a release packaging workflow for beta tags/manual runs
 
-The first GitHub Release draft for `v0.1.0-beta.1` also exists, although attaching the built zip is still a manual release-management step.
+The first GitHub Release draft for `v0.1.0-beta.1` already exists, although attaching the hardened release artifacts is still a release-management step.

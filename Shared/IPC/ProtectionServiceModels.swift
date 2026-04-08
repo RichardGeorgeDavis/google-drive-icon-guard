@@ -94,6 +94,14 @@ public struct ProtectionServiceStatusSnapshot: Codable, Equatable, Sendable {
     }
 }
 
+public enum ProtectionRemediationStatus: String, Codable, Equatable, Sendable {
+    case applied
+    case partialFailure
+    case noCandidates
+    case unavailable
+    case unreadable
+}
+
 public struct ProtectionServiceEventPayload: Codable, Equatable, Sendable, Identifiable {
     public var id: UUID
     public var timestamp: Date
@@ -103,7 +111,7 @@ public struct ProtectionServiceEventPayload: Codable, Equatable, Sendable, Ident
     public var detectedBytes: Int
     public var removedCount: Int
     public var removedBytes: Int
-    public var status: String
+    public var status: ProtectionRemediationStatus
     public var message: String
 
     public init(
@@ -115,7 +123,7 @@ public struct ProtectionServiceEventPayload: Codable, Equatable, Sendable, Ident
         detectedBytes: Int,
         removedCount: Int,
         removedBytes: Int,
-        status: String,
+        status: ProtectionRemediationStatus,
         message: String
     ) {
         self.id = id
@@ -128,5 +136,19 @@ public struct ProtectionServiceEventPayload: Codable, Equatable, Sendable, Ident
         self.removedBytes = removedBytes
         self.status = status
         self.message = message
+    }
+}
+
+public enum ProtectionStatusFactory {
+    public static func unavailable() -> ProtectionServiceStatusSnapshot {
+        ProtectionServiceStatusSnapshot(
+            mode: .inactive,
+            activeProtectedScopeCount: 0,
+            detail: "Automatic blocking remains in audit mode until a process-aware helper with Endpoint Security events is available.",
+            eventSourceState: .unavailable,
+            eventSourceDescription: "Current helper support is limited to replay/test scaffolding. Live Google-Drive-only blocking still requires a macOS Endpoint Security event source.",
+            installationState: .unavailable,
+            installationDescription: "No helper installation resources are available in this build."
+        )
     }
 }

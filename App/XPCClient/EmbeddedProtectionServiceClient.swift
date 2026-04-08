@@ -6,22 +6,13 @@ import DriveIconGuardShared
 @MainActor
 public final class EmbeddedProtectionServiceClient: ProtectionServiceClient {
     public var helperExecutablePath: String? {
-        helperHostLocator.locate()?.path
+        installationStatusResolver.helperExecutablePath
     }
 
-    public private(set) var status = ProtectionServiceStatusSnapshot(
-        mode: .inactive,
-        activeProtectedScopeCount: 0,
-        detail: "Automatic blocking remains in audit mode until a process-aware helper with Endpoint Security events is available.",
-        eventSourceState: .unavailable,
-        eventSourceDescription: "Current helper support is limited to replay/test scaffolding. Live Google-Drive-only blocking still requires a macOS Endpoint Security event source.",
-        installationState: .unavailable,
-        installationDescription: "No helper installation resources are available in this build."
-    )
+    public private(set) var status = ProtectionStatusFactory.unavailable()
 
     private let monitor: ScopeEnforcementMonitor
-    private let helperHostLocator: ProtectionHelperHostLocator
-    private let installerResourceLocator: ProtectionInstallerResourceLocator
+    private let installationStatusResolver: ProtectionInstallationStatusResolver
     private var configuration = ProtectionServiceConfiguration(liveProtectionEnabled: false, scopes: [])
     private var eventHandler: (@Sendable ([ProtectionServiceEventPayload]) -> Void)?
     private var isStarted = false
@@ -29,11 +20,15 @@ public final class EmbeddedProtectionServiceClient: ProtectionServiceClient {
     public init(
         monitor: ScopeEnforcementMonitor = ScopeEnforcementMonitor(),
         helperHostLocator: ProtectionHelperHostLocator = ProtectionHelperHostLocator(),
-        installerResourceLocator: ProtectionInstallerResourceLocator = ProtectionInstallerResourceLocator()
+        installerResourceLocator: ProtectionInstallerResourceLocator = ProtectionInstallerResourceLocator(),
+        installationReceiptLocator: ProtectionInstallationReceiptLocator = ProtectionInstallationReceiptLocator()
     ) {
         self.monitor = monitor
-        self.helperHostLocator = helperHostLocator
-        self.installerResourceLocator = installerResourceLocator
+        self.installationStatusResolver = ProtectionInstallationStatusResolver(
+            helperHostLocator: helperHostLocator,
+            installerResourceLocator: installerResourceLocator,
+            installationReceiptLocator: installationReceiptLocator
+        )
     }
 
     deinit {
@@ -59,7 +54,7 @@ public final class EmbeddedProtectionServiceClient: ProtectionServiceClient {
                     detectedBytes: $0.detectedBytes,
                     removedCount: $0.applyResult.removedCount,
                     removedBytes: $0.applyResult.removedBytes,
-                    status: $0.applyResult.status.rawValue,
+                    status: ProtectionRemediationStatus(rawValue: $0.applyResult.status.rawValue) ?? .partialFailure,
                     message: $0.applyResult.message
                 )
             }
@@ -95,8 +90,15 @@ public final class EmbeddedProtectionServiceClient: ProtectionServiceClient {
     }
 
     private func applyConfiguration() {
+        let betaScopedConfiguration = configuration.scopes.map { scope in
+            var normalizedScope = scope
+            if normalizedScope.enforcementMode == .blockKnownArtefacts {
+                normalizedScope.enforcementMode = .auditOnly
+            }
+            return normalizedScope
+        }
         let helperPath = helperExecutablePath
-        let protectedScopes = configuration.scopes.filter {
+        let protectedScopes = betaScopedConfiguration.filter {
             $0.supportStatus == .supported && $0.enforcementMode == .blockKnownArtefacts
         }
         let eventSourceStatus = helperPath == nil
@@ -108,7 +110,7 @@ public final class EmbeddedProtectionServiceClient: ProtectionServiceClient {
                 state: .needsApproval,
                 detail: "A standalone helper host is bundled, but the Endpoint Security system extension install path, Apple entitlement approval, and user authorization flow are still pending."
             )
-        let installationStatus = makeInstallationStatus(helperPath: helperPath)
+        let installationStatus = installationStatusResolver.resolve(helperPath: helperPath)
 
         if !configuration.liveProtectionEnabled {
             status = ProtectionServiceStatusSnapshot(
@@ -133,7 +135,7 @@ public final class EmbeddedProtectionServiceClient: ProtectionServiceClient {
                 activeProtectedScopeCount: protectedScopes.count,
                 detail: "Embedded protection is active for \(protectedScopes.count) process-attributed scope(s).",
                 helperExecutablePath: helperPath,
-                eventSourceState: .ready,
+                eventSourceState: .bundled,
                 eventSourceDescription: "Embedded monitoring is only for developer/test paths. True Google-Drive-only blocking still belongs behind the standalone helper and Endpoint Security event source.",
                 installationState: installationStatus.state,
                 installationDescription: installationStatus.detail
@@ -167,29 +169,8 @@ public final class EmbeddedProtectionServiceClient: ProtectionServiceClient {
             eventSourceDescription: helperExecutablePath == nil
                 ? "No standalone helper host is bundled in the current build."
                 : "A standalone helper host is bundled, but the live Endpoint Security install and approval path is still pending.",
-            installationState: makeInstallationStatus(helperPath: helperExecutablePath).state,
-            installationDescription: makeInstallationStatus(helperPath: helperExecutablePath).detail
-        )
-    }
-
-    private func makeInstallationStatus(helperPath: String?) -> ProtectionInstallationStatus {
-        guard helperPath != nil else {
-            return ProtectionInstallationStatus(
-                state: .unavailable,
-                detail: "No standalone helper host is bundled, so there is nothing to install yet."
-            )
-        }
-
-        if let installResources = installerResourceLocator.locateServiceRegistrationDirectory() {
-            return ProtectionInstallationStatus(
-                state: .installPlanReady,
-                detail: "Helper installation resources are packaged at \(installResources.path), but the actual install/registration flow is not implemented yet."
-            )
-        }
-
-        return ProtectionInstallationStatus(
-            state: .bundledOnly,
-            detail: "A helper host is bundled, but no installation resources were found for service registration or system extension setup."
+            installationState: installationStatusResolver.resolve(helperPath: helperExecutablePath).state,
+            installationDescription: installationStatusResolver.resolve(helperPath: helperExecutablePath).detail
         )
     }
 }

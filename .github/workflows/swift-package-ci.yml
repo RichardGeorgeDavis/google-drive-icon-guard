@@ -5,9 +5,14 @@ on:
   pull_request:
   workflow_dispatch:
 
+concurrency:
+  group: swift-package-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  swift-package:
+  swift-tests:
     runs-on: macos-latest
+    timeout-minutes: 30
     env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
 
@@ -21,8 +26,69 @@ jobs:
       - name: Show Swift version
         run: swift --version
 
-      - name: Build package
-        run: swift build
+      - name: Cache SwiftPM artifacts
+        uses: actions/cache@v4
+        with:
+          path: |
+            .build
+            ~/.swiftpm
+            ~/Library/Caches/org.swift.swiftpm
+          key: macos-swiftpm-${{ hashFiles('Package.resolved') }}-${{ github.ref_name }}
+          restore-keys: |
+            macos-swiftpm-${{ hashFiles('Package.resolved') }}-
+            macos-swiftpm-
 
       - name: Run tests
-        run: swift test
+        run: swift test --parallel
+
+  beta-package-smoke:
+    if: github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main'
+    runs-on: macos-latest
+    needs: swift-tests
+    timeout-minutes: 45
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+      ARCHIVE_BASENAME: google-drive-icon-guard-ci-smoke
+      RELEASE_VERSION: ci-smoke
+      RELEASE_BUILD_NUMBER: ${{ github.run_number }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v5
+
+      - name: Show active developer directory
+        run: xcode-select -p
+
+      - name: Cache SwiftPM artifacts
+        uses: actions/cache@v4
+        with:
+          path: |
+            .build
+            ~/.swiftpm
+            ~/Library/Caches/org.swift.swiftpm
+          key: macos-swiftpm-smoke-${{ hashFiles('Package.resolved') }}-${{ github.ref_name }}
+          restore-keys: |
+            macos-swiftpm-smoke-${{ hashFiles('Package.resolved') }}-
+            macos-swiftpm-smoke-
+
+      - name: Build unsigned beta smoke artifact
+        run: ./Tools/release/build-beta-app.sh
+
+      - name: Upload smoke artifacts
+        uses: actions/upload-artifact@v6
+        with:
+          name: google-drive-icon-guard-ci-smoke
+          path: |
+            dist/google-drive-icon-guard-ci-smoke.zip
+            dist/google-drive-icon-guard-ci-smoke.zip.sha256
+            dist/google-drive-icon-guard-ci-smoke.helper-status.json
+            dist/google-drive-icon-guard-ci-smoke.provenance.json
+
+      - name: Upload smoke diagnostics on failure
+        if: failure()
+        uses: actions/upload-artifact@v6
+        with:
+          name: swift-package-ci-diagnostics
+          path: |
+            .build
+            dist

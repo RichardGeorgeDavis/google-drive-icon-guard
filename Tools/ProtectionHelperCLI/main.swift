@@ -2,6 +2,7 @@ import DriveIconGuardHelper
 import DriveIconGuardIPC
 import DriveIconGuardScopeInventory
 import DriveIconGuardShared
+import DriveIconGuardXPCClient
 import Foundation
 
 private struct HelperHostOptions {
@@ -10,6 +11,14 @@ private struct HelperHostOptions {
     var useFreshScan = false
     var emitJSON = false
     var showStatus = false
+    var installService = false
+    var bootstrapService = false
+    var bootoutService = false
+    var showServiceStatus = false
+    var uninstallService = false
+    var showInstallPlan = false
+    var runXPCService = false
+    var machServiceName: String?
     var showHelp = false
 }
 
@@ -43,6 +52,51 @@ struct DriveIconGuardHelperCLI {
                 let installationStatus = currentInstallationStatus()
                 print(render(eventSourceStatus: eventSourceStatus, installationStatus: installationStatus, emitJSON: options.emitJSON))
                 return
+            }
+
+            if options.showInstallPlan {
+                let plan = try ProtectionServiceInstaller().plan()
+                print(render(plan: plan, emitJSON: options.emitJSON))
+                return
+            }
+
+            if options.installService {
+                let receipt = try ProtectionServiceInstaller().install()
+                print(render(receipt: receipt, emitJSON: options.emitJSON))
+                return
+            }
+
+            if options.bootstrapService {
+                let result = try ProtectionServiceDeploymentCoordinator().installAndBootstrap()
+                print(render(deploymentResult: result, emitJSON: options.emitJSON))
+                return
+            }
+
+            if options.bootoutService {
+                let status = try ProtectionServiceDeploymentCoordinator().bootoutAndUninstall()
+                print(render(launchdStatus: status, emitJSON: options.emitJSON))
+                return
+            }
+
+            if options.showServiceStatus {
+                let status = try ProtectionServiceDeploymentCoordinator().status()
+                print(render(launchdStatus: status, emitJSON: options.emitJSON))
+                return
+            }
+
+            if options.uninstallService {
+                try ProtectionServiceInstaller().uninstall()
+                print(options.emitJSON ? "{\"status\":\"uninstalled\"}" : "Helper service registration files removed.")
+                return
+            }
+
+            if options.runXPCService {
+                let machServiceName = options.machServiceName ?? ProtectionServiceRegistrationConfiguration.beta.machServiceName
+                _ = ProtectionXPCListenerHost(machServiceName: machServiceName)
+                if !options.emitJSON {
+                    print("drive-icon-guard-helper is serving NSXPC requests on \(machServiceName)")
+                }
+                RunLoop.main.run()
             }
 
             guard let eventsPath = options.eventsPath else {
@@ -94,6 +148,26 @@ struct DriveIconGuardHelperCLI {
                 options.emitJSON = true
             case "--status":
                 options.showStatus = true
+            case "--install-service":
+                options.installService = true
+            case "--bootstrap-service":
+                options.bootstrapService = true
+            case "--bootout-service":
+                options.bootoutService = true
+            case "--service-status":
+                options.showServiceStatus = true
+            case "--uninstall-service":
+                options.uninstallService = true
+            case "--install-plan":
+                options.showInstallPlan = true
+            case "--xpc-service":
+                options.runXPCService = true
+            case "--mach-service-name":
+                index += 1
+                guard index < arguments.count else {
+                    throw HelperHostError.invalidArguments("Expected a mach service name after `--mach-service-name`.")
+                }
+                options.machServiceName = arguments[index]
             case "--help", "-h":
                 options.showHelp = true
             default:
@@ -158,17 +232,8 @@ struct DriveIconGuardHelperCLI {
     }
 
     private static func currentInstallationStatus() -> ProtectionInstallationStatus {
-        if let resourceURL = installerResourceURL() {
-            return ProtectionInstallationStatus(
-                state: .installPlanReady,
-                detail: "Installation scaffold resources are present at \(resourceURL.path), but real registration is not implemented yet."
-            )
-        }
-
-        return ProtectionInstallationStatus(
-            state: .bundledOnly,
-            detail: "No packaged installation scaffold resources were found next to this helper executable."
-        )
+        let resolver = ProtectionInstallationStatusResolver()
+        return resolver.resolve(helperPath: ProtectionHelperHostLocator().locate()?.path)
     }
 
     private static func installerResourceURL() -> URL? {
@@ -187,22 +252,113 @@ struct DriveIconGuardHelperCLI {
         return nil
     }
 
+    private static func render(plan: ProtectionServiceRegistrationPlan, emitJSON: Bool) -> String {
+        if emitJSON {
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.sortedKeys]
+            guard let data = try? encoder.encode(plan),
+                  let string = String(data: data, encoding: .utf8) else {
+                return "{\"machServiceName\":\"\(plan.machServiceName)\"}"
+            }
+            return string
+        }
+
+        return """
+        LaunchAgent label: \(plan.launchdLabel)
+        Mach service: \(plan.machServiceName)
+        Helper executable: \(plan.helperExecutablePath)
+        LaunchAgent plist: \(plan.launchAgentPlistPath)
+        Receipt: \(plan.receiptPath)
+        """
+    }
+
+    private static func render(receipt: ProtectionInstallationReceipt, emitJSON: Bool) -> String {
+        if emitJSON {
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.sortedKeys]
+            guard let data = try? encoder.encode(receipt),
+                  let string = String(data: data, encoding: .utf8) else {
+                return "{\"state\":\"\(receipt.state.rawValue)\"}"
+            }
+            return string
+        }
+
+        return """
+        [install:\(receipt.state.rawValue)] \(receipt.detail)
+        helper=\(receipt.helperExecutablePath ?? "none")
+        machService=\(receipt.machServiceName ?? "none")
+        launchAgent=\(receipt.launchAgentPlistPath ?? "none")
+        """
+    }
+
+    private static func render(deploymentResult: ProtectionServiceDeploymentResult, emitJSON: Bool) -> String {
+        if emitJSON {
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.sortedKeys]
+            guard let data = try? encoder.encode(deploymentResult),
+                  let string = String(data: data, encoding: .utf8) else {
+                return "{\"state\":\"\(deploymentResult.receipt.state.rawValue)\"}"
+            }
+            return string
+        }
+
+        return """
+        [install:\(deploymentResult.receipt.state.rawValue)] \(deploymentResult.receipt.detail)
+        [launchd:\(deploymentResult.launchdStatus.isLoaded ? "loaded" : "not loaded")] \(deploymentResult.launchdStatus.detail)
+        service=\(deploymentResult.launchdStatus.serviceTarget)
+        """
+    }
+
+    private static func render(launchdStatus: ProtectionServiceLaunchdStatus, emitJSON: Bool) -> String {
+        if emitJSON {
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.sortedKeys]
+            guard let data = try? encoder.encode(launchdStatus),
+                  let string = String(data: data, encoding: .utf8) else {
+                return "{\"serviceTarget\":\"\(launchdStatus.serviceTarget)\",\"isLoaded\":\(launchdStatus.isLoaded ? "true" : "false")}"
+            }
+            return string
+        }
+
+        return """
+        [launchd:\(launchdStatus.isLoaded ? "loaded" : "not loaded")] \(launchdStatus.detail)
+        domain=\(launchdStatus.domainTarget)
+        service=\(launchdStatus.serviceTarget)
+        """
+    }
+
     private static func printUsage(to stream: UnsafeMutablePointer<FILE> = stdout) {
         fputs(
             """
             Usage: drive-icon-guard-helper --events <path> [--snapshot <report.json> | --fresh-scan] [--json]
                    drive-icon-guard-helper --status [--json]
+                   drive-icon-guard-helper --install-plan [--json]
+                   drive-icon-guard-helper --install-service [--json]
+                   drive-icon-guard-helper --bootstrap-service [--json]
+                   drive-icon-guard-helper --bootout-service [--json]
+                   drive-icon-guard-helper --service-status [--json]
+                   drive-icon-guard-helper --uninstall-service [--json]
+                   drive-icon-guard-helper --xpc-service [--mach-service-name <name>]
 
               --events <path>    JSON array or JSONL file containing ProcessAttributedFileEvent records.
               --snapshot <path>  Persisted inventory snapshot to use for scope evaluation.
               --fresh-scan       Generate a new inventory report instead of loading a snapshot.
               --status           Show the current Endpoint Security subscriber readiness state.
+              --install-plan     Show the launch-agent + receipt paths used for helper registration.
+              --install-service  Write launch-agent registration and installation receipt files.
+              --bootstrap-service Write registration files, then run launchctl bootstrap + kickstart.
+              --bootout-service  Run launchctl bootout when loaded, then remove registration files.
+              --service-status   Show launchctl print status for the named helper service.
+              --uninstall-service Remove launch-agent registration and installation receipt files.
+              --xpc-service      Run the helper as a named NSXPC service host.
+              --mach-service-name Override the mach service name used with `--xpc-service`.
               --json             Emit JSON evaluations instead of human-readable lines.
               --help             Show this message.
 
             Notes:
               This helper host currently supports replay/test event input only.
               Live Google-Drive-only blocking still requires a macOS Endpoint Security event source.
+              The service-install path writes launch-agent and receipt files but does not replace signing, approval, or real ES entitlement work.
 
             """,
             stream

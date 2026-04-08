@@ -1,6 +1,6 @@
 # Current Progress Handover
 
-This handover captures the **implemented state of the repository as of 2026-04-07**, not just the original product intent.
+This handover captures the **implemented state of the repository as of 2026-04-08**, not just the original product intent.
 
 ## Current state
 
@@ -16,13 +16,28 @@ The repo is now a standalone Git repository with:
 - a beta packaging script for an unsigned downloadable `.app`
 - a bundled standalone helper host executable for replay/test protection evaluation
 - packaged installer scaffold resources for future helper/system-extension registration
+- a runtime-support library for Xcode-hosted Endpoint Security session wiring
+- receipt-backed install-state verification for `installed` and `error`
+- typed authorization primitives for future helper-bound commands
+- release packaging support for optional codesign, notarization, and stapling
+- machine-readable helper-status and provenance release artifacts
 - a manual GitHub Actions workflow for building the beta app archive
-- CI + beta workflow caching, concurrency controls, and timeout guards
+- CI split into fast unit coverage plus slower packaging smoke/release lanes
 - a verified GitHub Actions beta packaging run on `main`
 - a saved GitHub Release draft for `v0.1.0-beta.1`
 - GitHub issue templates and a public launch checklist
+- app-managed helper LaunchAgent bootstrap/bootout/status lifecycle support via the packaged helper CLI and deployment coordinator
 
 The project is still in **beta / active development**. It is not yet the final downloadable app release.
+
+## Latest validated state
+
+The latest local validation rerun on **2026-04-08** is green:
+
+- `swift build --product drive-icon-guard-helper`
+- `swift test`
+- `./Tools/release/build-beta-app.sh`
+- current full suite size at handoff: `78` passing tests
 
 ## What is implemented
 
@@ -83,8 +98,69 @@ These outputs are ignored by Git and intended as repo-local generated state.
 
 - the final installed helper/service boundary
 - live process-attributed event capture via macOS Endpoint Security in an Xcode-linked runtime lane
-- signed and notarized beta release packaging
 - real installer packaging and registration for public beta downloads
+
+Signed/notarized packaging is now supported by the repo tooling, but the real Apple credentials and notary profile still need to be provisioned and validated in the actual release environment.
+
+## New Batch 4 boundary/install support now in repo
+
+- added `ProtectionInstallationReceiptLocator` so the client can elevate install state from scaffold-only to verified `installed` / `error`
+- added `ProtectionServiceAuthorizer` and typed command/caller models for future helper-bound method authorization
+- added `ProtectionInstallationStatusResolver`, `LocalProtectionServiceEndpoint`, and `BoundaryProtectionServiceClient` so the repo now exercises a protected helper/service boundary in-process
+- added `ProtectionXPCListenerHost` and `XPCProtectionServiceClient` so the same boundary now runs over an anonymous NSXPC listener/client path inside SwiftPM
+- added `ProtectionServiceInstaller` plus launch-agent receipt/plan support so the repo now writes concrete helper registration artefacts and can target a named Mach service
+- added `ProtectionServiceLaunchdManager` and `ProtectionServiceDeploymentCoordinator` so the repo now bootstraps, kickstarts, inspects, and boots out that LaunchAgent registration
+- added regression tests for:
+  - valid installed receipt
+  - mismatched or malformed receipts mapping to `error`
+  - high-risk command authorization requirements
+  - trusted installed helper-bound command flow
+  - install-state and validation rejection in the protected endpoint
+  - trusted installed NSXPC client flow
+  - NSXPC untrusted-caller and install-state rejection
+  - launch-agent/receipt install and uninstall flow
+  - application-support receipt discovery
+  - launchctl bootstrap/kickstart/status and bootstrap-failure receipt handling
+  - launchctl bootout plus registration-file removal
+
+This is now beyond anonymous test IPC. The repo can write launch-agent registration and installer-driven receipts, bootstrap that registration with `launchctl`, inspect the service state, boot it out again, and run the helper as a named Mach-service host. What still remains is signed deployment, app UX around install/start/stop/status, and final caller-identity validation in the deployed environment.
+
+## New Batch 5 release-hardening support now in repo
+
+- `build-beta-app.sh` now supports optional:
+  - codesign for the app bundle and helper
+  - notarization submission + stapling
+  - CMS signing for the provenance manifest
+- release builds now emit:
+  - zip checksum
+  - helper-status JSON
+  - provenance JSON with build/ref/checksum metadata
+- artifact verification now validates:
+  - checksum correctness
+  - helper-status JSON consistency
+  - provenance structure
+  - codesign and stapling when the release metadata says they should exist
+- CI is now split into:
+  - fast unit-test coverage
+  - slower packaging smoke verification
+  - tag/manual beta release packaging
+
+This completes the repo-side work for Batch 5. The remaining release blocker is operational setup outside the repo: real Apple signing material and a working notary profile.
+
+## New runtime-lane support now in repo
+
+- added `DriveIconGuardRuntimeSupport` as the package-side runtime lane support library
+- added `EndpointSecurityRuntimeCoordinator` to combine:
+  - helper policy evaluation
+  - `EndpointSecurityProcessAttributedEventSubscriber`
+  - live Endpoint Security session start/stop wiring
+- implemented `SystemEndpointSecurityLiveMonitoringSession` using dynamic framework loading so SwiftPM can compile the runtime lane support without directly linking `EndpointSecurity.framework`
+- added regression tests for:
+  - runtime session start success
+  - runtime session start failure
+  - live callback forwarding into policy evaluation
+
+This is still not the final signed host target. It is the repo-side runtime support that the future Xcode app/system-extension lane should consume.
 
 ## Recently completed optimization work
 
@@ -104,6 +180,11 @@ These outputs are ignored by Git and intended as repo-local generated state.
   - an Xcode app/system-extension target that links `EndpointSecurity.framework`
   - approved `com.apple.developer.endpoint-security.client` entitlement
   - signing/provisioning and user approval path on-device
+- what remains for a true live lane is outside SwiftPM alone:
+  - an actual signed Xcode app or system extension target
+  - the `com.apple.developer.endpoint-security.client` entitlement
+  - on-device approval
+- the repo now has the runtime code that host should consume
 - integration guide and template are now in-repo:
   - `docs/endpoint-security-xcode-integration.md`
   - `Installer/EndpointSecurity/entitlements.example.plist`
@@ -119,8 +200,8 @@ Local testing can be misleading on machines that use only Apple Command Line Too
 ## Recommended next steps
 
 1. Replace replay-only helper input with a real Endpoint Security event source and system-extension packaging.
-2. Decide when to sign and notarize public beta builds.
-3. Turn the current install scaffold into a real helper/system-extension registration flow.
+2. Provision and validate the real Apple signing/notary credentials used by the hardened release lane.
+3. Move the packaged helper lifecycle into real app UX and deployed helper trust validation.
 
 ## Planned next-step execution (handover-ready)
 
@@ -158,12 +239,15 @@ Local testing can be misleading on machines that use only Apple Command Line Too
 
 ## Review follow-up status (Cursor -> Codex)
 
-The first follow-up pass for the Cursor -> Codex review item is complete:
+The repo-side follow-up passes for the Cursor -> Codex review item are complete:
 
 - embedded beta runtime now normalizes `blockKnownArtefacts` to `auditOnly`, preventing unintended auto-enforcement in current beta paths
 - embedded status semantics now avoid reporting event source `ready` in dev/test path (uses `bundled`)
 - inventory refresh activity logging now records the latest persisted snapshot path directly
-- latest validation rerun is green (`swift test`: 49 passing)
+- monitor shutdown now prevents post-stop cleanup work
+- release artifact verification now passes end-to-end
+- ES subscriber runtime entrypoints and docs are aligned
+- latest validation rerun is green (`swift test`: 78 passing)
 
 ## Key docs
 
@@ -172,5 +256,6 @@ The first follow-up pass for the Cursor -> Codex review item is complete:
 - [Public launch checklist](./public-launch-checklist.md)
 - [Protection status transitions](./protection-status-state-transitions.md)
 - [Codex handover 2026-04-07](./codex-handover-2026-04-07.md)
+- [Session handover 2026-04-08](./session-handover-2026-04-08.md)
 - [Next steps roadmap](./next-steps-roadmap.md)
 - [Endpoint Security Xcode integration](./endpoint-security-xcode-integration.md)

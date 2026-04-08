@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "https://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.richardgeorgedavis.google-drive-icon-guard.beta.helper</string>
+  <key>MachServices</key>
+  <dict>
+    <key>com.richardgeorgedavis.google-drive-icon-guard.beta.helper.xpc</key>
+    <true/>
+  </dict>
+  <key>ProcessType</key>
+  <string>Background</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/Applications/Google Drive Icon Guard.app/Contents/Helpers/drive-icon-guard-helper</string>
+    <string>--xpc-service</string>
+    <string>--mach-service-name</string>
+    <string>com.richardgeorgedavis.google-drive-icon-guard.beta.helper.xpc</string>
+  </array>
+  <key>RunAtLoad</key>
+  <true/>
+</dict>
+</plist>

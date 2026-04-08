@@ -22,6 +22,7 @@ Use this checklist before making `google-drive-icon-guard` public or announcing 
 - add a release section to the README when a real downloadable app artifact exists
 - document minimum macOS version for the beta
 - document whether the beta is unsigned, signed, or notarized
+- publish checksum + provenance files with the downloadable archive
 - document what the bundled helper host and install scaffold do today versus what is still not implemented
 - add basic install and first-run instructions for the beta app
 - test the beta packaging script before announcing the release
@@ -40,6 +41,7 @@ Use this checklist before making `google-drive-icon-guard` public or announcing 
 - add a `Q&A` category in Discussions
 - keep issue templates focused and low-noise
 - make sure CI is green on the default branch
+- make sure the packaging smoke lane is green on the default branch
 
 ## Before asking people to try it
 
@@ -56,4 +58,4 @@ Use this checklist before making `google-drive-icon-guard` public or announcing 
 - Replace replay-only helper input with a real Endpoint Security event source
 - Turn helper install scaffolding into a real install/registration path
 - Add viewer screenshots for the public beta README
-- Decide and document beta signing/notarization timing
+- Validate the signed/notarized release lane with real Apple credentials

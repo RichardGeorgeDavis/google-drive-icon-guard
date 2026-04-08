@@ -2,12 +2,27 @@ name: Build Beta App
 
 on:
   workflow_dispatch:
+  push:
+    tags:
+      - "beta-*"
+
+concurrency:
+  group: build-beta-app-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build-beta-app:
     runs-on: macos-latest
+    timeout-minutes: 60
     env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+      ARCHIVE_BASENAME: google-drive-icon-guard-beta-release
+      RELEASE_VERSION: ${{ github.ref_type == 'tag' && github.ref_name || '0.1.0-beta' }}
+      RELEASE_BUILD_NUMBER: ${{ github.run_number }}
+      CODESIGN_IDENTITY: ${{ secrets.MACOS_CODESIGN_IDENTITY }}
+      CMS_SIGN_IDENTITY: ${{ secrets.MACOS_CMS_SIGN_IDENTITY }}
+      NOTARYTOOL_PROFILE: ${{ secrets.MACOS_NOTARYTOOL_PROFILE }}
+      APP_CODESIGN_ENTITLEMENTS: ""
 
     steps:
       - name: Check out repository
@@ -16,11 +31,65 @@ jobs:
       - name: Show active developer directory
         run: xcode-select -p
 
+      - name: Cache SwiftPM artifacts
+        uses: actions/cache@v4
+        with:
+          path: |
+            .build
+            ~/.swiftpm
+            ~/Library/Caches/org.swift.swiftpm
+          key: macos-swiftpm-release-${{ hashFiles('Package.resolved') }}-${{ github.ref_name }}
+          restore-keys: |
+            macos-swiftpm-release-${{ hashFiles('Package.resolved') }}-
+            macos-swiftpm-release-
+
       - name: Build beta app bundle
         run: ./Tools/release/build-beta-app.sh
 
-      - name: Upload beta app archive
+      - name: Publish release summary
+        run: |
+          ZIP_PATH="dist/${ARCHIVE_BASENAME}.zip"
+          CHECKSUM_PATH="${ZIP_PATH}.sha256"
+          HELPER_STATUS_PATH="dist/${ARCHIVE_BASENAME}.helper-status.json"
+          PROVENANCE_PATH="dist/${ARCHIVE_BASENAME}.provenance.json"
+          {
+            echo "## Beta Artifact Verification"
+            echo ""
+            echo "- App: \`dist/Google Drive Icon Guard.app\`"
+            echo "- Zip: \`${ZIP_PATH}\`"
+            echo "- Checksum: \`${CHECKSUM_PATH}\`"
+            echo "- Helper status: \`${HELPER_STATUS_PATH}\`"
+            echo "- Provenance: \`${PROVENANCE_PATH}\`"
+            echo ""
+            echo "### Provenance"
+            echo ""
+            echo '```json'
+            cat "${PROVENANCE_PATH}"
+            echo '```'
+            echo ""
+            echo "### Checksum"
+            echo ""
+            echo '```text'
+            cat "${CHECKSUM_PATH}"
+            echo '```'
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+      - name: Upload beta release artifacts
         uses: actions/upload-artifact@v6
         with:
-          name: google-drive-icon-guard-beta-unsigned
-          path: dist/google-drive-icon-guard-beta-unsigned.zip
+          name: google-drive-icon-guard-beta-release
+          path: |
+            dist/${{ env.ARCHIVE_BASENAME }}.zip
+            dist/${{ env.ARCHIVE_BASENAME }}.zip.sha256
+            dist/${{ env.ARCHIVE_BASENAME }}.helper-status.json
+            dist/${{ env.ARCHIVE_BASENAME }}.provenance.json
+            dist/${{ env.ARCHIVE_BASENAME }}.provenance.json.cms
+
+      - name: Upload build logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v6
+        with:
+          name: beta-build-diagnostics
+          path: |
+            .build
+            dist

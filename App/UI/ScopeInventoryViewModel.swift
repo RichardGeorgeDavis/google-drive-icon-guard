@@ -12,15 +12,7 @@ final class ScopeInventoryViewModel: ObservableObject {
     @Published private(set) var recentSnapshots: [PersistedScopeInventorySnapshot] = []
     @Published private(set) var historyComparison: ScopeInventoryHistoryComparison?
     @Published private(set) var activityLog = PersistedActivityLog()
-    @Published private(set) var protectionStatus = ProtectionServiceStatusSnapshot(
-        mode: .inactive,
-        activeProtectedScopeCount: 0,
-        detail: "Automatic blocking remains in audit mode until a process-aware helper with Endpoint Security events is available.",
-        eventSourceState: .unavailable,
-        eventSourceDescription: "Current helper support is limited to replay/test scaffolding. Live Google-Drive-only blocking still requires a macOS Endpoint Security event source.",
-        installationState: .unavailable,
-        installationDescription: "No helper installation resources are available in this build."
-    )
+    @Published private(set) var protectionStatus = ProtectionStatusFactory.unavailable()
     @Published private(set) var remediationPreview: ScopeRemediationPreview?
     @Published private(set) var remediationApplyResult: ScopeRemediationApplyResult?
     @Published private(set) var isLoading = false
@@ -31,6 +23,8 @@ final class ScopeInventoryViewModel: ObservableObject {
     private let service: ScopeInventoryService
     private let protectionClient: any ProtectionServiceClient
     private var automaticPermissionRetryCount = 0
+    private var refreshInFlight = false
+    private var refreshQueued = false
 
     init(
         service: ScopeInventoryService = ScopeInventoryService(),
@@ -55,10 +49,17 @@ final class ScopeInventoryViewModel: ObservableObject {
     }
 
     func refresh() {
+        guard !refreshInFlight else {
+            refreshQueued = true
+            return
+        }
+
         performRefresh()
     }
 
     private func performRefresh() {
+        refreshInFlight = true
+        refreshQueued = false
         isLoading = true
         errorMessage = nil
 
@@ -69,7 +70,11 @@ final class ScopeInventoryViewModel: ObservableObject {
             let persistenceResult = try service.persistReport(nextReport)
             let snapshots = try service.loadRecentSnapshots()
             let comparison = historyComparison(for: reportToDisplay, snapshots: snapshots)
-            let nextActivityLog = try updatedActivityLog(for: reportToDisplay, comparison: comparison)
+            let nextActivityLog = try updatedActivityLog(
+                for: reportToDisplay,
+                comparison: comparison,
+                refreshTargetPath: persistenceResult.latestURL.path
+            )
 
             report = reportToDisplay
             persistedPath = persistenceResult.latestURL.path
@@ -80,6 +85,7 @@ final class ScopeInventoryViewModel: ObservableObject {
             pendingPermissionRetry = shouldQueuePermissionRetry(for: reportToDisplay)
             isLoading = false
             updateProtectionConfiguration(for: reportToDisplay)
+            finishRefreshCycle()
         } catch {
             reportToDisplay.warnings.append(
                 DiscoveryWarning(
@@ -98,7 +104,17 @@ final class ScopeInventoryViewModel: ObservableObject {
             errorMessage = nil
             isLoading = false
             updateProtectionConfiguration(for: reportToDisplay)
+            finishRefreshCycle()
         }
+    }
+
+    private func finishRefreshCycle() {
+        refreshInFlight = false
+        guard refreshQueued else {
+            return
+        }
+
+        performRefresh()
     }
 
     func handleAppDidBecomeActive() {
@@ -225,9 +241,13 @@ final class ScopeInventoryViewModel: ObservableObject {
 
     private func updatedActivityLog(
         for report: ScopeInventoryReport,
-        comparison: ScopeInventoryHistoryComparison?
+        comparison: ScopeInventoryHistoryComparison?,
+        refreshTargetPath: String
     ) throws -> PersistedActivityLog {
-        var activityLog = try service.loadActivityLog()
+        var activityLog = self.activityLog
+        if activityLog.events.isEmpty {
+            activityLog = try service.loadActivityLog()
+        }
         var events = activityLog.events
 
         events.append(
@@ -235,7 +255,7 @@ final class ScopeInventoryViewModel: ObservableObject {
                 timestamp: report.generatedAt,
                 processSignature: refreshProcessSignature(),
                 scopeID: nil,
-                targetPath: persistedPath ?? "scope-inventory",
+                targetPath: refreshTargetPath,
                 artefactType: .unknown,
                 decision: .auditOnly,
                 aggregatedCount: report.artefactInventory.totalArtefactCount,
@@ -282,11 +302,11 @@ final class ScopeInventoryViewModel: ObservableObject {
     }
 
     private func appendActivityEvent(_ event: EventRecord) throws {
-        var activityLog = try service.loadActivityLog()
-        activityLog.events.insert(event, at: 0)
-        activityLog.events = Array(activityLog.events.prefix(200))
-        try service.persistActivityLog(activityLog)
-        self.activityLog = activityLog
+        var nextActivityLog = activityLog
+        nextActivityLog.events.insert(event, at: 0)
+        nextActivityLog.events = Array(nextActivityLog.events.prefix(200))
+        try service.persistActivityLog(nextActivityLog)
+        activityLog = nextActivityLog
     }
 
     private func shouldQueuePermissionRetry(for report: ScopeInventoryReport) -> Bool {
@@ -323,7 +343,7 @@ final class ScopeInventoryViewModel: ObservableObject {
                 scopeID: event.scopeID,
                 scopeDisplayName: report?.scopes.first(where: { $0.id == event.scopeID })?.displayName ?? URL(fileURLWithPath: event.scopePath).lastPathComponent,
                 scopePath: event.scopePath,
-                status: ScopeRemediationApplyStatus(rawValue: event.status) ?? .partialFailure,
+                status: ScopeRemediationApplyStatus(rawValue: event.status.rawValue) ?? .partialFailure,
                 message: event.message,
                 removedCount: event.removedCount,
                 removedBytes: event.removedBytes
@@ -345,7 +365,7 @@ final class ScopeInventoryViewModel: ObservableObject {
                         artefactType: .unknown,
                         decision: event.removedCount > 0 ? .deny : .auditOnly,
                         aggregatedCount: max(event.detectedArtefactCount, 1),
-                        rawEventType: "live_protection_\(event.status)"
+                        rawEventType: "live_protection_\(event.status.rawValue)"
                     )
                 )
             } catch {

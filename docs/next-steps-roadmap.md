@@ -2,6 +2,98 @@
 
 This roadmap captures immediate engineering priorities and project expansion opportunities.
 
+## Current execution plan
+
+The project should be executed in end-to-end batches. Do not broaden product claims beyond audit-only beta behavior until Batch 3 is complete and validated under real Endpoint Security traffic.
+
+### Batch 1: correctness and baseline stabilization
+
+Goal: remove known correctness gaps in the current beta lane.
+
+- fix `ScopeEnforcementMonitor.stop()` so shutdown disables enforcement, not just callbacks
+- add regression coverage proving no cleanup occurs after shutdown
+- fix beta artifact verification so helper JSON validation works in the release script
+- keep Endpoint Security preflight in a non-failure bundled state instead of reporting `.error`
+- align the Xcode integration doc with the actual public subscriber API
+
+Definition of done:
+
+- `swift test` passes
+- `./Tools/release/build-beta-app.sh` completes successfully
+- docs no longer imply a broken or inaccessible ES entrypoint
+
+### Batch 2: ES embedding contract
+
+Goal: make the live Endpoint Security integration surface concrete and handoff-ready.
+
+- finalize the public subscriber API used by the Xcode/runtime target
+- keep callback bridge and mapper as the canonical conversion path
+- document exact lifecycle: `start`, callback attachment, subscription, `ready`, `stop`, `error`
+- add focused tests for malformed callback conversion and status transitions
+
+Definition of done:
+
+- a consuming Xcode target can follow the in-repo guide without guessing
+- non-ready, ready, and failure states are distinct and credible
+
+### Batch 3: Xcode runtime lane and live callbacks
+
+Goal: run real Endpoint Security callbacks through the policy pipeline.
+
+- add or adopt an Xcode app/system-extension target that links `EndpointSecurity.framework`
+- wire entitlement, signing placeholders, `es_new_client`, `es_subscribe`, and teardown
+- route live callbacks through `handleLiveEndpointSecurityMessage(_:)`
+- validate create/rename/unlink extraction against real traffic
+- confirm events reach `HelperProtectionService` and move status to `.ready`
+
+Definition of done:
+
+- real ES events are observed and mapped end-to-end
+- the product can truthfully claim live callback ingestion exists
+
+### Batch 4: install lifecycle and boundary hardening
+
+Goal: move from bundled/install-plan signals to real operational readiness.
+
+- implement helper/system-extension registration flow
+- emit verified `installed` and `error` installation states
+- add authenticated app-helper boundary checks
+- add diagnostics for install, approval, and subscription failures
+
+Definition of done:
+
+- install state comes from real runtime checks
+- boundary trust assumptions are enforced, not implied
+
+Current implementation progress:
+
+- added receipt-backed install verification for `installed` and `error` state reporting
+- added typed command authorization primitives for future helper-bound requests
+- added a local protected service endpoint and boundary-backed client that enforce these checks end-to-end in-process
+- added an anonymous NSXPC listener/client path that exercises the same boundary over real IPC inside SwiftPM
+- added launch-agent registration, receipt writing, helper CLI install commands, named Mach-service client/host path, and launchctl bootstrap/bootout/status lifecycle support
+- remaining work is signed deployed-helper packaging, app install/start/stop/status UX, and final deployed caller-identity validation
+
+### Batch 5: release hardening
+
+Goal: make beta distribution trustworthy and repeatable.
+
+- add signing and notarization to the release lane
+- publish signed checksums and provenance
+- split CI into fast unit and slower integration/release lanes
+- update launch and handover docs to match shipped behavior exactly
+
+Definition of done:
+
+- tagged beta builds are reproducible, verifiable, and accurately documented
+
+Current implementation progress:
+
+- release packaging now emits helper-status plus provenance JSON artifacts
+- release packaging now supports optional codesign, notarization, stapling, and CMS provenance signing when identities/profiles are supplied
+- CI is now split between fast unit tests and a slower packaging smoke lane
+- remaining work is operational: provision real Apple signing credentials, validate notarization in CI, and attach hardened artifacts to Releases
+
 ## 30/60/90 day plan
 
 ### 30 days (stabilize + measure)
@@ -27,21 +119,11 @@ This roadmap captures immediate engineering priorities and project expansion opp
 
 ## Immediate engineering priorities
 
-1. Complete Endpoint Security runtime bridge
-   - wire `es_new_client` callback ingestion in the Xcode-linked runtime lane
-   - validate rename/create/unlink conversion semantics against real payloads
-   - route mapped events through `HelperProtectionService` in a signed entitlement path
-2. Implement helper/system-extension install lifecycle
-   - move from `installPlanReady` to verified runtime install states
-   - emit `installed` and `error` from real checks
-3. Document and enforce authenticated app-helper boundary
-   - finalize audit-token and code-signature validation requirements
-   - enforce per-method authorization checks at boundary ingress
-4. Improve operational diagnostics
-   - structured, privacy-safe runtime logs for startup/subscription/conversion failures
-5. Sign/notarize beta release lane
-   - add codesign/notarization checks as release gates
-   - publish signed checksums and release provenance metadata
+1. Move the helper lifecycle from CLI/coordinator wiring into app install/start/stop/status UX
+2. Validate Batch 5 with real Apple signing/notary credentials in CI
+3. Attach the hardened archive, checksum, and provenance files to the next beta Release
+4. Keep the Xcode live ES lane behind audit-only product claims until real entitlement-backed traffic is proven
+5. Then move to operator readiness UX and policy-profile expansion
 
 ## Performance optimization track
 
@@ -99,12 +181,14 @@ This roadmap captures immediate engineering priorities and project expansion opp
 
 ## Recommended execution order
 
-1. ES callback extraction and conversion wiring in the Xcode runtime lane
-2. Install/registration runtime path with state transitions
-3. Authenticated app-helper boundary enforcement
-4. Signing/notarization and release-trust pipeline
-5. Public beta polish and operator workflows
+1. Batch 1: correctness and baseline stabilization
+2. Batch 2: ES embedding contract
+3. Batch 3: Xcode runtime lane and live callbacks
+4. Batch 4: install lifecycle and boundary hardening
+5. Batch 5: release hardening
 
 ## Xcode live ES client
 
 SwiftPM builds do not link `EndpointSecurity.framework`. Add an Xcode app or system extension target, link the framework, apply entitlements, and wire `handleLiveEndpointSecurityMessage` as documented in [endpoint-security-xcode-integration.md](./endpoint-security-xcode-integration.md). Example entitlements: `Installer/EndpointSecurity/entitlements.example.plist`.
+
+What remains for a true live lane is outside SwiftPM alone: an actual signed Xcode app or system extension target, the `com.apple.developer.endpoint-security.client` entitlement, and on-device approval. The repo now has the runtime code that host should consume.

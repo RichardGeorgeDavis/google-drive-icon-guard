@@ -2,16 +2,21 @@ import Foundation
 import DriveIconGuardShared
 
 public final class ScopeEnforcementMonitor: @unchecked Sendable {
+    private static let queueSpecificKey = DispatchSpecificKey<UInt8>()
     private let engine: ScopeEnforcementEngine
     private let queue: DispatchQueue
     private let interval: TimeInterval
     private let cooldown: TimeInterval
+    private let maxIntervalMultiplier = 8.0
+    private let jitterFactor = 0.15
 
     private var timer: DispatchSourceTimer?
     private var trackedScopes: [DriveManagedScope] = []
     private var isEvaluating = false
+    private var isStarted = false
     private var lastActionDatesByPath: [String: Date] = [:]
     private var eventHandler: (@Sendable ([ScopeEnforcementEvent]) -> Void)?
+    private var currentInterval: TimeInterval
 
     public init(
         engine: ScopeEnforcementEngine = ScopeEnforcementEngine(),
@@ -23,6 +28,8 @@ public final class ScopeEnforcementMonitor: @unchecked Sendable {
         self.interval = interval
         self.cooldown = cooldown
         self.queue = queue
+        self.currentInterval = interval
+        self.queue.setSpecific(key: Self.queueSpecificKey, value: 1)
     }
 
     deinit {
@@ -31,13 +38,14 @@ public final class ScopeEnforcementMonitor: @unchecked Sendable {
 
     public func start(eventHandler: @escaping @Sendable ([ScopeEnforcementEvent]) -> Void) {
         queue.async {
+            self.isStarted = true
             self.eventHandler = eventHandler
             guard self.timer == nil else {
                 return
             }
 
             let timer = DispatchSource.makeTimerSource(queue: self.queue)
-            timer.schedule(deadline: .now() + self.interval, repeating: self.interval)
+            timer.schedule(deadline: .now() + self.interval)
             timer.setEventHandler { [weak self] in
                 self?.evaluate()
             }
@@ -47,28 +55,42 @@ public final class ScopeEnforcementMonitor: @unchecked Sendable {
     }
 
     public func stop() {
-        queue.async { [self] in
-            self.timer?.setEventHandler {}
-            self.timer?.cancel()
-            self.timer = nil
-            self.eventHandler = nil
+        if DispatchQueue.getSpecific(key: Self.queueSpecificKey) != nil {
+            stopNow()
+            return
+        }
+
+        queue.sync {
+            stopNow()
         }
     }
 
     public func updateScopes(_ scopes: [DriveManagedScope]) {
         queue.async {
+            let previousPaths = Set(self.trackedScopes.map(\.path))
             self.trackedScopes = scopes
+            guard self.isStarted else {
+                return
+            }
+            let nextPaths = Set(scopes.map(\.path))
+            if previousPaths != nextPaths {
+                self.currentInterval = self.interval
+                self.evaluate()
+            }
         }
     }
 
     public func evaluateNow() {
         queue.async {
+            guard self.isStarted else {
+                return
+            }
             self.evaluate()
         }
     }
 
     private func evaluate() {
-        guard !isEvaluating else {
+        guard isStarted, !isEvaluating else {
             return
         }
 
@@ -86,6 +108,7 @@ public final class ScopeEnforcementMonitor: @unchecked Sendable {
         }
 
         guard !eligibleScopes.isEmpty else {
+            advanceSchedule(didDetectEvents: false)
             return
         }
 
@@ -95,11 +118,41 @@ public final class ScopeEnforcementMonitor: @unchecked Sendable {
             lastActionDatesByPath[event.scope.path] = now
         }
         isEvaluating = false
+        advanceSchedule(didDetectEvents: !events.isEmpty)
 
         guard !events.isEmpty, let eventHandler else {
             return
         }
 
         eventHandler(events)
+    }
+
+    private func advanceSchedule(didDetectEvents: Bool) {
+        guard timer != nil else {
+            return
+        }
+
+        if didDetectEvents {
+            currentInterval = interval
+        } else {
+            currentInterval = min(currentInterval * 2, interval * maxIntervalMultiplier)
+        }
+
+        let jitter = currentInterval * jitterFactor
+        let randomizedJitter = Double.random(in: -jitter...jitter)
+        let delay = max(interval, currentInterval + randomizedJitter)
+        timer?.schedule(deadline: .now() + delay)
+    }
+
+    private func stopNow() {
+        isStarted = false
+        trackedScopes = []
+        lastActionDatesByPath = [:]
+        isEvaluating = false
+        timer?.setEventHandler {}
+        timer?.cancel()
+        timer = nil
+        eventHandler = nil
+        currentInterval = interval
     }
 }

@@ -17,6 +17,7 @@ Use when:
 
 - helper/event-source components are present but idle.
 - no active live subscription is currently running.
+- preflight/startup validation succeeded, but no real live callback has been dispatched yet.
 
 ### `needsApproval`
 
@@ -80,6 +81,7 @@ Use when:
 - embedded beta runtime must not escalate to auto-enforcement from configuration alone.
 - report truthful readiness based on runtime evidence, not intended future behavior.
 - prefer explicit `error` details over generic placeholders when start/install attempts fail.
+- `start(eventHandler:)` preflight must not inject a synthetic policy event into downstream evaluation.
 
 ## Remediation Event Status (`ProtectionRemediationStatus`)
 

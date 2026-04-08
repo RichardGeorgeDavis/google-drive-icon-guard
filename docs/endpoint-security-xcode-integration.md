@@ -12,7 +12,8 @@ The Swift package builds the helper and libraries without linking `EndpointSecur
 
 1. In Xcode: **File → New → Project → macOS App** (or add a **System Extension** target to an existing app).
 2. **Add the Swift package**: **File → Add Package Dependencies** → add the local path to this repo, or add the remote URL if published.
-3. Add the **`DriveIconGuardHelper`** (and **`DriveIconGuardIPC`** if needed) product to the app/extension target’s **Frameworks, Libraries, and Embedded Content**.
+3. Add the **`DriveIconGuardRuntimeSupport`** product to the app/extension target’s **Frameworks, Libraries, and Embedded Content**.
+4. Add **`DriveIconGuardHelper`** or **`DriveIconGuardIPC`** only if you need lower-level types directly in the host target.
 
 ## 2. Link Endpoint Security
 
@@ -45,27 +46,56 @@ See also: `Installer/EndpointSecurity/entitlements.example.plist` in this repo.
 
 ## 4. Wire the live client to the subscriber
 
-`EndpointSecurityProcessAttributedEventSubscriber` exposes:
+For the Xcode runtime lane, prefer `DriveIconGuardRuntimeSupport.EndpointSecurityRuntimeCoordinator`.
+
+It owns:
+
+- `HelperProtectionService`
+- `EndpointSecurityProcessAttributedEventSubscriber`
+- the live `es_new_client` / `es_subscribe` session via `SystemEndpointSecurityLiveMonitoringSession`
+
+Lower-level subscriber APIs remain available when needed. `EndpointSecurityProcessAttributedEventSubscriber` exposes:
 
 - `start(eventHandler:)` — sets the runtime handler used for mapped events.
-- `handleLiveEndpointSecurityMessage(_:)` — call this from the **`es_new_client`** callback with each `es_message_t` pointer.
+- `handleLiveEndpointSecurityMessage(_:)` — public live-callback entrypoint; call this from the **`es_new_client`** callback with each `es_message_t` pointer.
+- `handleLiveRawEvent(_:)` — optional raw-event entrypoint for tests or adapters that already converted callback payloads into `EndpointSecurityRawCallbackEvent`.
 
-Copy the commented integration block from `Helper/EventSubscription/EndpointSecurityProcessAttributedEventSubscriber.swift` (search for `Live ES client integration`) into your app/extension code, then:
+Recommended runtime-host flow:
 
-1. Call `start { event in … }` (e.g. forward `event` into `HelperProtectionService` or your coordinator).
-2. In `es_new_client`’s handler, call `subscriber.handleLiveEndpointSecurityMessage(message)`.
-3. On shutdown, unsubscribe and delete the client as in the comment (`es_unsubscribe_all`, `es_delete_client`).
+1. Instantiate `EndpointSecurityRuntimeCoordinator`.
+2. Call `updateScopes(...)` with the currently protected scopes.
+3. Call `start { evaluation in … }` to begin live monitoring and receive policy evaluations.
+4. On shutdown, call `stop()`.
+
+Minimal example:
+
+```swift
+import DriveIconGuardRuntimeSupport
+import DriveIconGuardShared
+
+let coordinator = EndpointSecurityRuntimeCoordinator()
+coordinator.updateScopes(scopes)
+try coordinator.start { evaluation in
+    print("decision:", evaluation.decision.rawValue, "path:", evaluation.event.targetPath)
+}
+```
+
+Notes:
+
+- `start(eventHandler:)` should not itself emit a synthetic policy event. It only arms the runtime handler and leaves the subscriber in a bundled/non-ready state until real live callbacks are dispatched.
+- use `handleLiveRawEvent(_:)` only outside the direct ES callback path, such as unit tests or intermediate adapters.
+- `EndpointSecurityRuntimeCoordinator` marks the subscriber `ready` once the live ES client is successfully subscribed.
 
 ## 5. Order of operations
 
-1. Instantiate `EndpointSecurityProcessAttributedEventSubscriber`.
-2. Call `start(eventHandler:)` so `runtimeEventHandler` is set **before** the first ES callback.
-3. Create the client and subscribe.
-4. On tear down, call `stop()` on the subscriber and tear down the ES client.
+1. Instantiate `EndpointSecurityRuntimeCoordinator`.
+2. Update scopes before starting live monitoring.
+3. Call `start(...)` after entitlements/signing are in place.
+4. On tear down, call `stop()`.
 
 ## 6. SwiftPM-only beta builds
 
-The command-line helper built with `swift build` continues to use preflight / status-only behavior until this Xcode-linked path is used. That is expected; do not remove the beta guard in the app until policy and install flows are verified end-to-end.
+The command-line helper built with `swift build` continues to use preflight / status-only behavior until this Xcode-linked path is used. During this phase the subscriber may report a bundled/non-ready state after `start(eventHandler:)`; that is expected. The runtime-support library compiles the real ES client/session wiring, but entitlement approval and an Xcode-hosted signed target are still required before live monitoring can run successfully.
 
 ## References
 

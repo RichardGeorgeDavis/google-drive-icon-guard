@@ -28,6 +28,10 @@ let package = Package(
             name: "DriveIconGuardHelper",
             targets: ["DriveIconGuardHelper"]
         ),
+        .library(
+            name: "DriveIconGuardRuntimeSupport",
+            targets: ["DriveIconGuardRuntimeSupport"]
+        ),
         .executable(
             name: "drive-icon-guard-scope-inventory",
             targets: ["DriveIconGuardScopeInventoryCLI"]
@@ -66,7 +70,8 @@ let package = Package(
             dependencies: [
                 "DriveIconGuardShared",
                 "DriveIconGuardIPC",
-                "DriveIconGuardScopeInventory"
+                "DriveIconGuardScopeInventory",
+                "DriveIconGuardHelper"
             ],
             path: "App/XPCClient",
             exclude: ["README.md"]
@@ -88,6 +93,16 @@ let package = Package(
                 "PolicyEngine",
                 "ProcessClassifier"
             ]
+        ),
+        .target(
+            name: "DriveIconGuardRuntimeSupport",
+            dependencies: [
+                "DriveIconGuardShared",
+                "DriveIconGuardIPC",
+                "DriveIconGuardHelper"
+            ],
+            path: "RuntimeHostSupport",
+            exclude: ["README.md"]
         ),
         .executableTarget(
             name: "DriveIconGuardScopeInventoryCLI",
@@ -114,7 +129,8 @@ let package = Package(
                 "DriveIconGuardShared",
                 "DriveIconGuardIPC",
                 "DriveIconGuardScopeInventory",
-                "DriveIconGuardHelper"
+                "DriveIconGuardHelper",
+                "DriveIconGuardXPCClient"
             ],
             path: "Tools/ProtectionHelperCLI"
         ),
@@ -122,7 +138,9 @@ let package = Package(
             name: "DriveIconGuardScopeInventoryTests",
             dependencies: [
                 "DriveIconGuardShared",
-                "DriveIconGuardScopeInventory"
+                "DriveIconGuardScopeInventory",
+                "DriveIconGuardIPC",
+                "DriveIconGuardXPCClient"
             ],
             path: "Tests/DriveIconGuardScopeInventoryTests"
         ),
@@ -135,6 +153,16 @@ let package = Package(
                 "DriveIconGuardHelper"
             ],
             path: "Tests/DriveIconGuardHelperTests"
+        ),
+        .testTarget(
+            name: "DriveIconGuardRuntimeSupportTests",
+            dependencies: [
+                "DriveIconGuardShared",
+                "DriveIconGuardIPC",
+                "DriveIconGuardHelper",
+                "DriveIconGuardRuntimeSupport"
+            ],
+            path: "Tests/DriveIconGuardRuntimeSupportTests"
         )
     ]
 )
