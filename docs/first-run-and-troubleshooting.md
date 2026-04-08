@@ -10,9 +10,10 @@ Right now the repo provides:
 - timestamped history snapshots under `cache/scope-inventory/history/`
 - a standalone helper host binary
 - installer scaffold resources for the future helper/system-extension registration flow
+- app-side controls for installing and removing the current LaunchAgent-based helper path
 - a beta packaging script for local `.app` and zip creation
 
-It does **not** yet install a privileged helper, register a system extension, or ship the final helper-backed downloadable app flow.
+It does **not** yet install the final entitlement-backed Endpoint Security host, register a production system extension, or ship the final helper-backed downloadable app flow.
 
 ## First run
 
@@ -74,7 +75,7 @@ swift test
 
 At the current beta stage, the repo should not require special macOS privacy permissions just to run the discovery CLI, viewer, or helper `--status` check.
 
-The current code reads Google Drive state from the user account’s DriveFS data and presents the resulting inventory. The helper/install boundary is scaffolded, but real live Endpoint Security monitoring and helper registration are not implemented yet.
+The current code reads Google Drive state from the user account’s DriveFS data and presents the resulting inventory. The app can now manage the current LaunchAgent helper lifecycle for beta evaluation, but real live Endpoint Security monitoring still requires the separate Xcode host target, entitlement, signing, and user-approval path.
 
 ## Troubleshooting
 

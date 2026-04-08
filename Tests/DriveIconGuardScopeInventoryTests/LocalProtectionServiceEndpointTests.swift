@@ -27,7 +27,8 @@ func localProtectionServiceEndpointAcceptsTrustedInstalledFlow() throws {
     let eventBox = EndpointEventBox()
     let endpoint = LocalProtectionServiceEndpoint(
         service: fixture.service,
-        installationStatusResolver: fixture.statusResolver
+        installationStatusResolver: fixture.statusResolver,
+        configurationStore: fixture.configurationStore
     )
 
     let configurationResult = endpoint.updateConfiguration(
@@ -53,6 +54,7 @@ func localProtectionServiceEndpointAcceptsTrustedInstalledFlow() throws {
     let evaluation = fixture.service.process(makeProtectedEvent())
 
     #expect(evaluation.decision == .deny)
+    waitFor(timeout: 2) { eventBox.events.count == 1 }
     #expect(eventBox.events.count == 1)
     #expect(eventBox.events.first?.status == .applied)
 }
@@ -62,7 +64,8 @@ func localProtectionServiceEndpointRejectsUntrustedCaller() throws {
     let fixture = try makeInstalledBoundaryFixture()
     let endpoint = LocalProtectionServiceEndpoint(
         service: fixture.service,
-        installationStatusResolver: fixture.statusResolver
+        installationStatusResolver: fixture.statusResolver,
+        configurationStore: fixture.configurationStore
     )
 
     let result = endpoint.start(
@@ -81,7 +84,8 @@ func localProtectionServiceEndpointRejectsWhenInstallationIsNotReady() throws {
     let fixture = try makeBundledBoundaryFixture()
     let endpoint = LocalProtectionServiceEndpoint(
         service: fixture.service,
-        installationStatusResolver: fixture.statusResolver
+        installationStatusResolver: fixture.statusResolver,
+        configurationStore: fixture.configurationStore
     )
 
     let result = endpoint.start(context: trustedContext())
@@ -96,7 +100,8 @@ func localProtectionServiceEndpointRejectsInvalidConfiguration() throws {
     let fixture = try makeInstalledBoundaryFixture()
     let endpoint = LocalProtectionServiceEndpoint(
         service: fixture.service,
-        installationStatusResolver: fixture.statusResolver
+        installationStatusResolver: fixture.statusResolver,
+        configurationStore: fixture.configurationStore
     )
 
     let result = endpoint.updateConfiguration(
@@ -129,7 +134,8 @@ func boundaryProtectionServiceClientUsesProtectedEndpoint() throws {
     let fixture = try makeInstalledBoundaryFixture()
     let endpoint = LocalProtectionServiceEndpoint(
         service: fixture.service,
-        installationStatusResolver: fixture.statusResolver
+        installationStatusResolver: fixture.statusResolver,
+        configurationStore: fixture.configurationStore
     )
     let client = BoundaryProtectionServiceClient(
         endpoint: endpoint,
@@ -149,8 +155,101 @@ func boundaryProtectionServiceClientUsesProtectedEndpoint() throws {
     let evaluation = fixture.service.process(makeProtectedEvent())
 
     #expect(evaluation.decision == .deny)
+    waitFor(timeout: 2) { eventBox.events.count == 1 }
     #expect(client.status.installationState == .installed)
     #expect(eventBox.events.count == 1)
+}
+
+@Test
+func localProtectionServiceEndpointRestoresPersistedConfigurationForInstalledHelper() throws {
+    let fixture = try makeInstalledBoundaryFixture()
+    try fixture.configurationStore.persist(
+        ProtectionServiceConfiguration(
+            liveProtectionEnabled: true,
+            scopes: [makeProtectedScope()]
+        )
+    )
+
+    let endpoint = LocalProtectionServiceEndpoint(
+        service: fixture.service,
+        installationStatusResolver: fixture.statusResolver,
+        configurationStore: fixture.configurationStore
+    )
+
+    let status = endpoint.queryStatus(context: trustedContext()).status
+    let evaluation = fixture.service.process(makeProtectedEvent())
+
+    #expect(status.installationState == .installed)
+    #expect(status.activeProtectedScopeCount == 1)
+    #expect(evaluation.decision == .deny)
+}
+
+@Test
+func localProtectionServiceEndpointSurfacesRuntimeStartFailure() throws {
+    let fixture = try makeInstalledBoundaryFixture()
+    let runtimeController = FakeRuntimeController()
+    runtimeController.onStart = { _ in
+        runtimeController.status = ProtectionEventSourceStatus(
+            state: .error,
+            detail: "Fake runtime start failed."
+        )
+        throw FakeRuntimeControllerError.startFailed
+    }
+
+    let endpoint = LocalProtectionServiceEndpoint(
+        service: runtimeController,
+        installationStatusResolver: fixture.statusResolver,
+        configurationStore: fixture.configurationStore
+    )
+
+    let result = endpoint.start(context: trustedContext())
+
+    #expect(result.accepted == false)
+    #expect(result.failureReason == .runtimeStartFailed)
+    #expect(result.status.eventSourceState == .error)
+    #expect(result.detail.contains("fake runtime start failed"))
+}
+
+@Test
+@MainActor
+func localProtectionServiceEndpointHandlesSynchronousRuntimeEventDuringStart() throws {
+    let fixture = try makeInstalledBoundaryFixture()
+    let runtimeController = FakeRuntimeController()
+    let eventBox = EndpointEventBox()
+    runtimeController.onStart = { handler in
+        runtimeController.status = ProtectionEventSourceStatus(
+            state: .ready,
+            detail: "Fake runtime is ready."
+        )
+        handler(makeProtectedEvaluation())
+    }
+
+    let endpoint = LocalProtectionServiceEndpoint(
+        service: runtimeController,
+        installationStatusResolver: fixture.statusResolver,
+        configurationStore: fixture.configurationStore
+    )
+
+    let subscribeResult = endpoint.subscribeEvents(
+        context: trustedContext(),
+        handler: { eventBox.events.append(contentsOf: $0) }
+    )
+    #expect(subscribeResult.accepted)
+
+    let configurationResult = endpoint.updateConfiguration(
+        ProtectionServiceConfiguration(
+            liveProtectionEnabled: true,
+            scopes: [makeProtectedScope()]
+        ),
+        context: trustedContext()
+    )
+    #expect(configurationResult.accepted)
+
+    waitFor(timeout: 2) { eventBox.events.count == 1 }
+    #expect(configurationResult.status.eventSourceState == .ready)
+    #expect(runtimeController.startCallCount == 1)
+    #expect(runtimeController.updatedScopes.last?.map(\.id) == [makeProtectedScope().id])
+    #expect(eventBox.events.first?.scopeID == makeProtectedScope().id)
 }
 
 private func trustedContext() -> ProtectionServiceAuthorizationContext {
@@ -188,7 +287,17 @@ private func makeProtectedEvent() -> ProcessAttributedFileEvent {
     )
 }
 
-private func makeInstalledBoundaryFixture() throws -> (service: HelperProtectionService, statusResolver: ProtectionInstallationStatusResolver) {
+private func makeProtectedEvaluation() -> HelperProtectionEvaluation {
+    HelperProtectionEvaluation(
+        event: makeProtectedEvent(),
+        matchedScopeID: makeProtectedScope().id,
+        matchedArtefactType: .iconFile,
+        decision: .deny,
+        reason: "Synthetic runtime callback for LocalProtectionServiceEndpoint test."
+    )
+}
+
+private func makeInstalledBoundaryFixture() throws -> (service: HelperProtectionService, statusResolver: ProtectionInstallationStatusResolver, configurationStore: ProtectionServiceConfigurationStore) {
     let root = try makeTemporaryFixtureRoot()
     let helperPath = try makeHelperExecutable(at: root)
     try writeReceipt(
@@ -202,16 +311,18 @@ private func makeInstalledBoundaryFixture() throws -> (service: HelperProtection
 
     return (
         HelperProtectionService(subscriber: ReadySubscriber()),
-        makeResolver(root: root)
+        makeResolver(root: root),
+        makeConfigurationStore(root: root)
     )
 }
 
-private func makeBundledBoundaryFixture() throws -> (service: HelperProtectionService, statusResolver: ProtectionInstallationStatusResolver) {
+private func makeBundledBoundaryFixture() throws -> (service: HelperProtectionService, statusResolver: ProtectionInstallationStatusResolver, configurationStore: ProtectionServiceConfigurationStore) {
     let root = try makeTemporaryFixtureRoot()
     _ = try makeHelperExecutable(at: root)
     return (
         HelperProtectionService(subscriber: ReadySubscriber()),
-        makeResolver(root: root)
+        makeResolver(root: root),
+        makeConfigurationStore(root: root)
     )
 }
 
@@ -220,6 +331,15 @@ private func makeResolver(root: URL) -> ProtectionInstallationStatusResolver {
         helperHostLocator: ProtectionHelperHostLocator(currentDirectoryPath: root.path),
         installerResourceLocator: ProtectionInstallerResourceLocator(currentDirectoryPath: root.path),
         installationReceiptLocator: ProtectionInstallationReceiptLocator(currentDirectoryPath: root.path)
+    )
+}
+
+private func makeConfigurationStore(root: URL) -> ProtectionServiceConfigurationStore {
+    ProtectionServiceConfigurationStore(
+        registrationPaths: ProtectionServiceRegistrationPaths(
+            applicationSupportDirectory: root.appendingPathComponent("ApplicationSupport", isDirectory: true),
+            launchAgentsDirectory: root.appendingPathComponent("LaunchAgents", isDirectory: true)
+        )
     )
 }
 
@@ -245,6 +365,52 @@ private func writeReceipt(at url: URL, receipt: ProtectionInstallationReceipt) t
     encoder.outputFormatting = [.sortedKeys]
     let data = try encoder.encode(receipt)
     try data.write(to: url)
+}
+
+private func waitFor(timeout: TimeInterval, condition: @escaping () -> Bool) {
+    let timeoutDate = Date().addingTimeInterval(timeout)
+    while Date() < timeoutDate {
+        if condition() {
+            return
+        }
+        Thread.sleep(forTimeInterval: 0.02)
+    }
+}
+
+private enum FakeRuntimeControllerError: Error, LocalizedError {
+    case startFailed
+
+    var errorDescription: String? {
+        switch self {
+        case .startFailed:
+            return "fake runtime start failed"
+        }
+    }
+}
+
+private final class FakeRuntimeController: ProtectionServiceRuntimeControlling, @unchecked Sendable {
+    var status = ProtectionEventSourceStatus(
+        state: .bundled,
+        detail: "Fake runtime controller is bundled."
+    )
+    var startCallCount = 0
+    var updatedScopes: [[DriveManagedScope]] = []
+    var onStart: ((@escaping @Sendable (HelperProtectionEvaluation) -> Void) throws -> Void)?
+
+    func updateScopes(_ scopes: [DriveManagedScope]) {
+        updatedScopes.append(scopes)
+    }
+
+    func start(evaluationHandler: @escaping @Sendable (HelperProtectionEvaluation) -> Void) throws {
+        startCallCount += 1
+        try onStart?(evaluationHandler)
+    }
+
+    func stop() {}
+
+    func runtimeStatus() -> ProtectionEventSourceStatus {
+        status
+    }
 }
 #elseif canImport(XCTest)
 import DriveIconGuardHelper
@@ -275,7 +441,8 @@ final class LocalProtectionServiceEndpointTests: XCTestCase {
         let eventBox = EndpointEventBox()
         let endpoint = LocalProtectionServiceEndpoint(
             service: fixture.service,
-            installationStatusResolver: fixture.statusResolver
+            installationStatusResolver: fixture.statusResolver,
+            configurationStore: fixture.configurationStore
         )
 
         let configurationResult = endpoint.updateConfiguration(
@@ -301,6 +468,7 @@ final class LocalProtectionServiceEndpointTests: XCTestCase {
         let evaluation = fixture.service.process(makeProtectedEvent())
 
         XCTAssertEqual(evaluation.decision, .deny)
+        waitFor(timeout: 2) { eventBox.events.count == 1 }
         XCTAssertEqual(eventBox.events.count, 1)
         XCTAssertEqual(eventBox.events.first?.status, .applied)
     }
@@ -309,7 +477,8 @@ final class LocalProtectionServiceEndpointTests: XCTestCase {
         let fixture = try makeInstalledBoundaryFixture()
         let endpoint = LocalProtectionServiceEndpoint(
             service: fixture.service,
-            installationStatusResolver: fixture.statusResolver
+            installationStatusResolver: fixture.statusResolver,
+            configurationStore: fixture.configurationStore
         )
 
         let result = endpoint.start(
@@ -327,7 +496,8 @@ final class LocalProtectionServiceEndpointTests: XCTestCase {
         let fixture = try makeBundledBoundaryFixture()
         let endpoint = LocalProtectionServiceEndpoint(
             service: fixture.service,
-            installationStatusResolver: fixture.statusResolver
+            installationStatusResolver: fixture.statusResolver,
+            configurationStore: fixture.configurationStore
         )
 
         let result = endpoint.start(context: trustedContext())
@@ -341,7 +511,8 @@ final class LocalProtectionServiceEndpointTests: XCTestCase {
         let fixture = try makeInstalledBoundaryFixture()
         let endpoint = LocalProtectionServiceEndpoint(
             service: fixture.service,
-            installationStatusResolver: fixture.statusResolver
+            installationStatusResolver: fixture.statusResolver,
+            configurationStore: fixture.configurationStore
         )
 
         let result = endpoint.updateConfiguration(
@@ -373,7 +544,8 @@ final class LocalProtectionServiceEndpointTests: XCTestCase {
         let fixture = try makeInstalledBoundaryFixture()
         let endpoint = LocalProtectionServiceEndpoint(
             service: fixture.service,
-            installationStatusResolver: fixture.statusResolver
+            installationStatusResolver: fixture.statusResolver,
+            configurationStore: fixture.configurationStore
         )
         let client = BoundaryProtectionServiceClient(
             endpoint: endpoint,
@@ -393,8 +565,98 @@ final class LocalProtectionServiceEndpointTests: XCTestCase {
         let evaluation = fixture.service.process(makeProtectedEvent())
 
         XCTAssertEqual(evaluation.decision, .deny)
+        waitFor(timeout: 2) { eventBox.events.count == 1 }
         XCTAssertEqual(client.status.installationState, .installed)
         XCTAssertEqual(eventBox.events.count, 1)
+    }
+
+    func testLocalProtectionServiceEndpointRestoresPersistedConfigurationForInstalledHelper() throws {
+        let fixture = try makeInstalledBoundaryFixture()
+        try fixture.configurationStore.persist(
+            ProtectionServiceConfiguration(
+                liveProtectionEnabled: true,
+                scopes: [makeProtectedScope()]
+            )
+        )
+
+        let endpoint = LocalProtectionServiceEndpoint(
+            service: fixture.service,
+            installationStatusResolver: fixture.statusResolver,
+            configurationStore: fixture.configurationStore
+        )
+
+        let status = endpoint.queryStatus(context: trustedContext()).status
+        let evaluation = fixture.service.process(makeProtectedEvent())
+
+        XCTAssertEqual(status.installationState, .installed)
+        XCTAssertEqual(status.activeProtectedScopeCount, 1)
+        XCTAssertEqual(evaluation.decision, .deny)
+    }
+
+    func testLocalProtectionServiceEndpointSurfacesRuntimeStartFailure() throws {
+        let fixture = try makeInstalledBoundaryFixture()
+        let runtimeController = FakeRuntimeController()
+        runtimeController.onStart = { _ in
+            runtimeController.status = ProtectionEventSourceStatus(
+                state: .error,
+                detail: "Fake runtime start failed."
+            )
+            throw FakeRuntimeControllerError.startFailed
+        }
+
+        let endpoint = LocalProtectionServiceEndpoint(
+            service: runtimeController,
+            installationStatusResolver: fixture.statusResolver,
+            configurationStore: fixture.configurationStore
+        )
+
+        let result = endpoint.start(context: trustedContext())
+
+        XCTAssertFalse(result.accepted)
+        XCTAssertEqual(result.failureReason, .runtimeStartFailed)
+        XCTAssertEqual(result.status.eventSourceState, .error)
+        XCTAssertTrue(result.detail.contains("fake runtime start failed"))
+    }
+
+    @MainActor
+    func testLocalProtectionServiceEndpointHandlesSynchronousRuntimeEventDuringStart() throws {
+        let fixture = try makeInstalledBoundaryFixture()
+        let runtimeController = FakeRuntimeController()
+        let eventBox = EndpointEventBox()
+        runtimeController.onStart = { handler in
+            runtimeController.status = ProtectionEventSourceStatus(
+                state: .ready,
+                detail: "Fake runtime is ready."
+            )
+            handler(makeProtectedEvaluation())
+        }
+
+        let endpoint = LocalProtectionServiceEndpoint(
+            service: runtimeController,
+            installationStatusResolver: fixture.statusResolver,
+            configurationStore: fixture.configurationStore
+        )
+
+        let subscribeResult = endpoint.subscribeEvents(
+            context: trustedContext(),
+            handler: { eventBox.events.append(contentsOf: $0) }
+        )
+        XCTAssertTrue(subscribeResult.accepted)
+
+        let configurationResult = endpoint.updateConfiguration(
+            ProtectionServiceConfiguration(
+                liveProtectionEnabled: true,
+                scopes: [makeProtectedScope()]
+            ),
+            context: trustedContext()
+        )
+        XCTAssertTrue(configurationResult.accepted)
+
+        waitFor(timeout: 2) { eventBox.events.count == 1 }
+        XCTAssertEqual(configurationResult.status.eventSourceState, .ready)
+        XCTAssertEqual(runtimeController.startCallCount, 1)
+        XCTAssertEqual(runtimeController.updatedScopes.last?.map(\.id), [makeProtectedScope().id])
+        XCTAssertEqual(eventBox.events.first?.scopeID, makeProtectedScope().id)
     }
 }
 
@@ -433,7 +695,17 @@ private func makeProtectedEvent() -> ProcessAttributedFileEvent {
     )
 }
 
-private func makeInstalledBoundaryFixture() throws -> (service: HelperProtectionService, statusResolver: ProtectionInstallationStatusResolver) {
+private func makeProtectedEvaluation() -> HelperProtectionEvaluation {
+    HelperProtectionEvaluation(
+        event: makeProtectedEvent(),
+        matchedScopeID: makeProtectedScope().id,
+        matchedArtefactType: .iconFile,
+        decision: .deny,
+        reason: "Synthetic runtime callback for LocalProtectionServiceEndpoint test."
+    )
+}
+
+private func makeInstalledBoundaryFixture() throws -> (service: HelperProtectionService, statusResolver: ProtectionInstallationStatusResolver, configurationStore: ProtectionServiceConfigurationStore) {
     let root = try makeTemporaryFixtureRoot()
     let helperPath = try makeHelperExecutable(at: root)
     try writeReceipt(
@@ -447,16 +719,18 @@ private func makeInstalledBoundaryFixture() throws -> (service: HelperProtection
 
     return (
         HelperProtectionService(subscriber: ReadySubscriber()),
-        makeResolver(root: root)
+        makeResolver(root: root),
+        makeConfigurationStore(root: root)
     )
 }
 
-private func makeBundledBoundaryFixture() throws -> (service: HelperProtectionService, statusResolver: ProtectionInstallationStatusResolver) {
+private func makeBundledBoundaryFixture() throws -> (service: HelperProtectionService, statusResolver: ProtectionInstallationStatusResolver, configurationStore: ProtectionServiceConfigurationStore) {
     let root = try makeTemporaryFixtureRoot()
     _ = try makeHelperExecutable(at: root)
     return (
         HelperProtectionService(subscriber: ReadySubscriber()),
-        makeResolver(root: root)
+        makeResolver(root: root),
+        makeConfigurationStore(root: root)
     )
 }
 
@@ -465,6 +739,15 @@ private func makeResolver(root: URL) -> ProtectionInstallationStatusResolver {
         helperHostLocator: ProtectionHelperHostLocator(currentDirectoryPath: root.path),
         installerResourceLocator: ProtectionInstallerResourceLocator(currentDirectoryPath: root.path),
         installationReceiptLocator: ProtectionInstallationReceiptLocator(currentDirectoryPath: root.path)
+    )
+}
+
+private func makeConfigurationStore(root: URL) -> ProtectionServiceConfigurationStore {
+    ProtectionServiceConfigurationStore(
+        registrationPaths: ProtectionServiceRegistrationPaths(
+            applicationSupportDirectory: root.appendingPathComponent("ApplicationSupport", isDirectory: true),
+            launchAgentsDirectory: root.appendingPathComponent("LaunchAgents", isDirectory: true)
+        )
     )
 }
 
@@ -490,5 +773,51 @@ private func writeReceipt(at url: URL, receipt: ProtectionInstallationReceipt) t
     encoder.outputFormatting = [.sortedKeys]
     let data = try encoder.encode(receipt)
     try data.write(to: url)
+}
+
+private func waitFor(timeout: TimeInterval, condition: @escaping () -> Bool) {
+    let timeoutDate = Date().addingTimeInterval(timeout)
+    while Date() < timeoutDate {
+        if condition() {
+            return
+        }
+        Thread.sleep(forTimeInterval: 0.02)
+    }
+}
+
+private enum FakeRuntimeControllerError: Error, LocalizedError {
+    case startFailed
+
+    var errorDescription: String? {
+        switch self {
+        case .startFailed:
+            return "fake runtime start failed"
+        }
+    }
+}
+
+private final class FakeRuntimeController: ProtectionServiceRuntimeControlling, @unchecked Sendable {
+    var status = ProtectionEventSourceStatus(
+        state: .bundled,
+        detail: "Fake runtime controller is bundled."
+    )
+    var startCallCount = 0
+    var updatedScopes: [[DriveManagedScope]] = []
+    var onStart: ((@escaping @Sendable (HelperProtectionEvaluation) -> Void) throws -> Void)?
+
+    func updateScopes(_ scopes: [DriveManagedScope]) {
+        updatedScopes.append(scopes)
+    }
+
+    func start(evaluationHandler: @escaping @Sendable (HelperProtectionEvaluation) -> Void) throws {
+        startCallCount += 1
+        try onStart?(evaluationHandler)
+    }
+
+    func stop() {}
+
+    func runtimeStatus() -> ProtectionEventSourceStatus {
+        status
+    }
 }
 #endif

@@ -53,3 +53,5 @@ public final class EndpointSecurityRuntimeCoordinator: @unchecked Sendable {
         helperService.process(event)
     }
 }
+
+extension EndpointSecurityRuntimeCoordinator: ProtectionServiceRuntimeControlling {}

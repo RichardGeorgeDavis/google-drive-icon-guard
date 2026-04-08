@@ -8,6 +8,8 @@ This repository is currently focused on discovery, classification, and safety gr
 
 Open an issue before starting broad architectural changes, major policy changes, or large UI shifts.
 
+For local setup, use [docs/development-setup.md](../docs/development-setup.md) before digging into the longer handover docs.
+
 Please keep pull requests focused and explain:
 
 - the problem being solved

@@ -16,36 +16,48 @@ final class ScopeInventoryViewModel: ObservableObject {
     @Published private(set) var remediationPreview: ScopeRemediationPreview?
     @Published private(set) var remediationApplyResult: ScopeRemediationApplyResult?
     @Published private(set) var isLoading = false
+    @Published private(set) var isUpdatingHelperService = false
     @Published private(set) var errorMessage: String?
+    @Published private(set) var helperServiceStatus: ProtectionServiceLaunchdStatus?
+    @Published private(set) var helperLifecycleMessage: String?
     @Published private(set) var pendingPermissionRetry = false
     @Published private(set) var liveProtectionEnabled = true
 
     private let service: ScopeInventoryService
-    private let protectionClient: any ProtectionServiceClient
+    private var protectionClient: any ProtectionServiceClient
+    private let installationStatusResolver: ProtectionInstallationStatusResolver
+    private let configurationStore: ProtectionServiceConfigurationStore
+    private let registrationConfiguration: ProtectionServiceRegistrationConfiguration
+    private let usesInjectedProtectionClient: Bool
     private var automaticPermissionRetryCount = 0
     private var refreshInFlight = false
     private var refreshQueued = false
 
     init(
         service: ScopeInventoryService = ScopeInventoryService(),
-        protectionClient: (any ProtectionServiceClient)? = nil
+        protectionClient: (any ProtectionServiceClient)? = nil,
+        installationStatusResolver: ProtectionInstallationStatusResolver = ProtectionInstallationStatusResolver(),
+        configurationStore: ProtectionServiceConfigurationStore = ProtectionServiceConfigurationStore(),
+        registrationConfiguration: ProtectionServiceRegistrationConfiguration = .beta
     ) {
         self.service = service
+        self.installationStatusResolver = installationStatusResolver
+        self.configurationStore = configurationStore
+        self.registrationConfiguration = registrationConfiguration
+        self.usesInjectedProtectionClient = protectionClient != nil
         let resolvedProtectionClient = protectionClient ?? EmbeddedProtectionServiceClient()
         self.protectionClient = resolvedProtectionClient
         self.storageRootPath = service.storageRootPath()
-        self.protectionStatus = resolvedProtectionClient.status
-
-        resolvedProtectionClient.setEventHandler { [weak self] events in
-            guard let self else {
-                return
-            }
-
-            Task { @MainActor in
-                self.handleProtectionEvents(events)
-            }
+        if protectionClient == nil {
+            self.helperServiceStatus = Self.currentHelperServiceStatus()
+            self.protectionClient = Self.makeProtectionClient(
+                helperServiceStatus: self.helperServiceStatus,
+                registrationConfiguration: registrationConfiguration
+            )
         }
-        resolvedProtectionClient.start()
+        bindProtectionClientEventHandler()
+        self.protectionStatus = self.protectionClient.status
+        syncProtectionClient()
     }
 
     func refresh() {
@@ -144,9 +156,78 @@ final class ScopeInventoryViewModel: ObservableObject {
     func setLiveProtectionEnabled(_ enabled: Bool) {
         liveProtectionEnabled = enabled
         updateProtectionConfiguration(for: report)
+    }
 
-        if enabled {
-            protectionClient.evaluateNow()
+    func refreshHelperServiceStatus() {
+        guard !usesInjectedProtectionClient else {
+            protectionStatus = protectionClient.status
+            return
+        }
+
+        helperServiceStatus = Self.currentHelperServiceStatus()
+        rebuildProtectionClientIfNeeded()
+        syncProtectionClient()
+    }
+
+    func installAndStartHelperService() {
+        guard !usesInjectedProtectionClient, !isUpdatingHelperService else {
+            return
+        }
+
+        isUpdatingHelperService = true
+        helperLifecycleMessage = nil
+
+        do {
+            try configurationStore.persist(currentProtectionConfiguration(for: report))
+        } catch {
+            helperLifecycleMessage = "Failed to persist helper configuration before install: \(error.localizedDescription)"
+            isUpdatingHelperService = false
+            return
+        }
+
+        Task {
+            do {
+                let deploymentResult = try await Task.detached {
+                    try ProtectionServiceDeploymentCoordinator().installAndBootstrap()
+                }.value
+
+                helperServiceStatus = deploymentResult.launchdStatus
+                helperLifecycleMessage = deploymentResult.receipt.detail
+                isUpdatingHelperService = false
+                rebuildProtectionClientIfNeeded()
+                syncProtectionClient()
+            } catch {
+                helperLifecycleMessage = "Failed to install or bootstrap the background helper: \(error.localizedDescription)"
+                isUpdatingHelperService = false
+                refreshHelperServiceStatus()
+            }
+        }
+    }
+
+    func removeInstalledHelperService() {
+        guard !usesInjectedProtectionClient, !isUpdatingHelperService else {
+            return
+        }
+
+        isUpdatingHelperService = true
+        helperLifecycleMessage = nil
+
+        Task {
+            do {
+                let launchdStatus = try await Task.detached {
+                    try ProtectionServiceDeploymentCoordinator().bootoutAndUninstall()
+                }.value
+
+                helperServiceStatus = launchdStatus
+                helperLifecycleMessage = launchdStatus.detail
+                isUpdatingHelperService = false
+                rebuildProtectionClientIfNeeded()
+                syncProtectionClient()
+            } catch {
+                helperLifecycleMessage = "Failed to remove the installed background helper: \(error.localizedDescription)"
+                isUpdatingHelperService = false
+                refreshHelperServiceStatus()
+            }
         }
     }
 
@@ -322,13 +403,84 @@ final class ScopeInventoryViewModel: ObservableObject {
     }
 
     private func updateProtectionConfiguration(for report: ScopeInventoryReport?) {
-        protectionClient.updateConfiguration(
-            ProtectionServiceConfiguration(
-                liveProtectionEnabled: liveProtectionEnabled,
-                scopes: report?.scopes ?? []
-            )
+        syncProtectionClient(report: report)
+    }
+
+    private func currentProtectionConfiguration(for report: ScopeInventoryReport?) -> ProtectionServiceConfiguration {
+        ProtectionServiceConfiguration(
+            liveProtectionEnabled: liveProtectionEnabled,
+            scopes: report?.scopes ?? []
         )
+    }
+
+    private func syncProtectionClient(report: ScopeInventoryReport? = nil) {
+        let protectionConfiguration = currentProtectionConfiguration(for: report ?? self.report)
+
+        do {
+            try configurationStore.persist(protectionConfiguration)
+        } catch {
+            helperLifecycleMessage = "Failed to persist background helper configuration: \(error.localizedDescription)"
+        }
+
+        protectionClient.updateConfiguration(protectionConfiguration)
+        if protectionConfiguration.liveProtectionEnabled {
+            protectionClient.start()
+        } else {
+            protectionClient.stop()
+        }
+
+        if protectionConfiguration.liveProtectionEnabled {
+            protectionClient.evaluateNow()
+        }
+
         protectionStatus = protectionClient.status
+    }
+
+    private func bindProtectionClientEventHandler() {
+        protectionClient.setEventHandler { [weak self] events in
+            guard let self else {
+                return
+            }
+
+            Task { @MainActor in
+                self.handleProtectionEvents(events)
+            }
+        }
+    }
+
+    private func rebuildProtectionClientIfNeeded() {
+        guard !usesInjectedProtectionClient else {
+            return
+        }
+
+        let shouldUseInstalledClient = helperServiceStatus?.isLoaded == true
+        let isUsingInstalledClient = protectionClient is XPCProtectionServiceClient
+
+        guard shouldUseInstalledClient != isUsingInstalledClient else {
+            return
+        }
+
+        protectionClient.stop()
+        protectionClient = Self.makeProtectionClient(
+            helperServiceStatus: helperServiceStatus,
+            registrationConfiguration: registrationConfiguration
+        )
+        bindProtectionClientEventHandler()
+    }
+
+    private static func currentHelperServiceStatus() -> ProtectionServiceLaunchdStatus? {
+        try? ProtectionServiceDeploymentCoordinator().status()
+    }
+
+    private static func makeProtectionClient(
+        helperServiceStatus: ProtectionServiceLaunchdStatus?,
+        registrationConfiguration: ProtectionServiceRegistrationConfiguration
+    ) -> any ProtectionServiceClient {
+        if helperServiceStatus?.isLoaded == true {
+            return XPCProtectionServiceClient(machServiceName: registrationConfiguration.machServiceName)
+        }
+
+        return EmbeddedProtectionServiceClient()
     }
 
     private func handleProtectionEvents(_ events: [ProtectionServiceEventPayload]) {

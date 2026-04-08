@@ -50,7 +50,10 @@ plutil -extract CFBundleIdentifier raw "${INFO_PLIST_PATH}" >/dev/null
 plutil -extract CFBundleExecutable raw "${INFO_PLIST_PATH}" >/dev/null
 
 unzip -t "${ZIP_PATH}" >/dev/null
-shasum -a 256 -c "${CHECKSUM_PATH}" >/dev/null
+(
+  cd "${PROJECT_ROOT}/dist"
+  shasum -a 256 -c "$(basename "${CHECKSUM_PATH}")" >/dev/null
+)
 
 STATUS_JSON="$("${HELPER_PATH}" --status --json)"
 

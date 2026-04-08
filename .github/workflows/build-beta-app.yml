@@ -1,10 +1,38 @@
-name: Build Beta App
+name: Build Alpha/Beta App
 
 on:
   workflow_dispatch:
+    inputs:
+      release_channel:
+        description: "Prerelease channel"
+        required: true
+        default: beta
+        type: choice
+        options:
+          - alpha
+          - beta
+      release_tag:
+        description: "GitHub release tag to create or update. If empty, a channel-prefixed tag is generated for this run."
+        required: false
+        default: ""
+        type: string
+      release_version:
+        description: "Human-facing release version shown in the app and release title. Defaults from tag when omitted."
+        required: false
+        default: ""
+        type: string
+      publish_to_github_release:
+        description: "Publish the built assets to GitHub Releases"
+        required: true
+        default: true
+        type: boolean
   push:
     tags:
+      - "alpha-*"
       - "beta-*"
+
+permissions:
+  contents: write
 
 concurrency:
   group: build-beta-app-${{ github.workflow }}-${{ github.ref }}
@@ -16,17 +44,60 @@ jobs:
     timeout-minutes: 60
     env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
-      ARCHIVE_BASENAME: google-drive-icon-guard-beta-release
-      RELEASE_VERSION: ${{ github.ref_type == 'tag' && github.ref_name || '0.1.0-beta' }}
       RELEASE_BUILD_NUMBER: ${{ github.run_number }}
       CODESIGN_IDENTITY: ${{ secrets.MACOS_CODESIGN_IDENTITY }}
       CMS_SIGN_IDENTITY: ${{ secrets.MACOS_CMS_SIGN_IDENTITY }}
       NOTARYTOOL_PROFILE: ${{ secrets.MACOS_NOTARYTOOL_PROFILE }}
       APP_CODESIGN_ENTITLEMENTS: ""
+      WORKFLOW_RELEASE_CHANNEL: ${{ inputs.release_channel }}
+      WORKFLOW_RELEASE_TAG: ${{ inputs.release_tag }}
+      WORKFLOW_RELEASE_VERSION: ${{ inputs.release_version }}
+      WORKFLOW_PUBLISH_TO_GITHUB_RELEASE: ${{ inputs.publish_to_github_release }}
 
     steps:
       - name: Check out repository
         uses: actions/checkout@v5
+
+      - name: Resolve release metadata
+        run: |
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            RELEASE_TAG="${GITHUB_REF_NAME}"
+            case "${RELEASE_TAG}" in
+              alpha-*) RELEASE_CHANNEL="alpha" ;;
+              *) RELEASE_CHANNEL="beta" ;;
+            esac
+            PUBLISH_TO_GITHUB_RELEASE="true"
+          else
+            RELEASE_CHANNEL="${WORKFLOW_RELEASE_CHANNEL:-beta}"
+            RELEASE_TAG="${WORKFLOW_RELEASE_TAG}"
+            if [ -z "${RELEASE_TAG}" ]; then
+              RELEASE_TAG="${RELEASE_CHANNEL}-run-${GITHUB_RUN_NUMBER}"
+            fi
+            PUBLISH_TO_GITHUB_RELEASE="${WORKFLOW_PUBLISH_TO_GITHUB_RELEASE:-false}"
+          fi
+
+          RELEASE_VERSION="${WORKFLOW_RELEASE_VERSION}"
+          if [ -z "${RELEASE_VERSION}" ]; then
+            case "${RELEASE_TAG}" in
+              alpha-*) RELEASE_VERSION="${RELEASE_TAG#alpha-}" ;;
+              beta-*) RELEASE_VERSION="${RELEASE_TAG#beta-}" ;;
+              *) RELEASE_VERSION="${RELEASE_TAG}" ;;
+            esac
+          fi
+
+          ARCHIVE_BASENAME="google-drive-icon-guard-${RELEASE_CHANNEL}-release"
+          RELEASE_TITLE="Google Drive Icon Guard ${RELEASE_VERSION}"
+
+          {
+            echo "RELEASE_CHANNEL=${RELEASE_CHANNEL}"
+            echo "RELEASE_TAG=${RELEASE_TAG}"
+            echo "RELEASE_VERSION=${RELEASE_VERSION}"
+            echo "ARCHIVE_BASENAME=${ARCHIVE_BASENAME}"
+            echo "RELEASE_TITLE=${RELEASE_TITLE}"
+            echo "RELEASE_TARGET=${GITHUB_SHA}"
+            echo "PUBLISH_TO_GITHUB_RELEASE=${PUBLISH_TO_GITHUB_RELEASE}"
+            echo "RELEASE_NOTES_PATH=dist/${ARCHIVE_BASENAME}.release-notes.md"
+          } >> "${GITHUB_ENV}"
 
       - name: Show active developer directory
         run: xcode-select -p
@@ -43,23 +114,31 @@ jobs:
             macos-swiftpm-release-${{ hashFiles('Package.resolved') }}-
             macos-swiftpm-release-
 
-      - name: Build beta app bundle
+      - name: Build prerelease app bundle
         run: ./Tools/release/build-beta-app.sh
+
+      - name: Render GitHub release notes
+        run: ./Tools/release/render-github-release-notes.sh
 
       - name: Publish release summary
         run: |
+          CHANNEL_UPPER="$(printf '%s' "${RELEASE_CHANNEL}" | tr '[:lower:]' '[:upper:]')"
           ZIP_PATH="dist/${ARCHIVE_BASENAME}.zip"
           CHECKSUM_PATH="${ZIP_PATH}.sha256"
           HELPER_STATUS_PATH="dist/${ARCHIVE_BASENAME}.helper-status.json"
           PROVENANCE_PATH="dist/${ARCHIVE_BASENAME}.provenance.json"
+          RELEASE_NOTES_PATH="dist/${ARCHIVE_BASENAME}.release-notes.md"
           {
-            echo "## Beta Artifact Verification"
+            echo "## ${CHANNEL_UPPER} Artifact Verification"
             echo ""
+            echo "- Release tag: \`${RELEASE_TAG}\`"
+            echo "- Release version: \`${RELEASE_VERSION}\`"
             echo "- App: \`dist/Google Drive Icon Guard.app\`"
             echo "- Zip: \`${ZIP_PATH}\`"
             echo "- Checksum: \`${CHECKSUM_PATH}\`"
             echo "- Helper status: \`${HELPER_STATUS_PATH}\`"
             echo "- Provenance: \`${PROVENANCE_PATH}\`"
+            echo "- Release notes: \`${RELEASE_NOTES_PATH}\`"
             echo ""
             echo "### Provenance"
             echo ""
@@ -77,13 +156,21 @@ jobs:
       - name: Upload beta release artifacts
         uses: actions/upload-artifact@v6
         with:
-          name: google-drive-icon-guard-beta-release
+          name: ${{ env.ARCHIVE_BASENAME }}
           path: |
             dist/${{ env.ARCHIVE_BASENAME }}.zip
             dist/${{ env.ARCHIVE_BASENAME }}.zip.sha256
             dist/${{ env.ARCHIVE_BASENAME }}.helper-status.json
             dist/${{ env.ARCHIVE_BASENAME }}.provenance.json
             dist/${{ env.ARCHIVE_BASENAME }}.provenance.json.cms
+            dist/${{ env.ARCHIVE_BASENAME }}.release-notes.md
+
+      - name: Publish GitHub prerelease assets
+        if: env.PUBLISH_TO_GITHUB_RELEASE == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPOSITORY: ${{ github.repository }}
+        run: ./Tools/release/publish-github-release.sh
 
       - name: Upload build logs on failure
         if: failure()

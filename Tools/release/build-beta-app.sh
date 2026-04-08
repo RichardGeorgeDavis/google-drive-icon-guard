@@ -51,7 +51,10 @@ fi
 create_archive() {
   echo "Creating zip archive..."
   /usr/bin/ditto -c -k --keepParent "${APP_ROOT}" "${ZIP_PATH}"
-  shasum -a 256 "${ZIP_PATH}" > "${CHECKSUM_PATH}"
+  (
+    cd "${DIST_ROOT}"
+    shasum -a 256 "$(basename "${ZIP_PATH}")" > "$(basename "${CHECKSUM_PATH}")"
+  )
 }
 
 sign_bundle_if_configured() {

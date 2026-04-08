@@ -29,6 +29,11 @@ This note is the shortest reliable handoff for the next chat.
   - named Mach-service client/host path
   - launch-agent registration/receipt writing
   - `launchctl` bootstrap/kickstart/bootout/status lifecycle support
+  - app-side install/start/remove/status controls for the LaunchAgent helper path
+  - persisted helper configuration restore for the installed helper path
+  - protected helper boundary now accepts a pluggable runtime controller, including the future live Endpoint Security runtime coordinator
+  - runtime-start failure is surfaced through boundary outcomes/status
+  - synchronous startup callbacks no longer risk deadlocking the endpoint queue
 - Batch 5 repo-side release hardening is complete:
   - checksum, helper-status, and provenance artifacts
   - optional codesign/notarization/stapling hooks
@@ -60,31 +65,33 @@ These commands were run successfully on 2026-04-08:
 
 Latest full test count at handoff:
 
-- `78` passing tests
+- `81` passing tests
 
 ## Best next coding target
 
-Move the helper lifecycle from CLI/coordinator-only wiring into app UX.
+Build the real Xcode Endpoint Security host/entitlement lane.
 
 Concretely:
 
-1. add app-side install/start/stop/status actions around the existing deployment coordinator
-2. surface launchd/install errors in operator-facing UI instead of CLI-only output
-3. keep the current authorization/install-state checks intact while promoting the flow into the app
+1. create or adopt the signed Xcode app/system-extension target that will own the live ES client
+2. link `EndpointSecurity.framework` and attach the approved `com.apple.developer.endpoint-security.client` entitlement
+3. wire the runtime coordinator into that host and validate real create/rename/unlink callback traffic
+4. prove the installed helper boundary stays armed through that host path while the app is closed
 
 After that:
 
-1. provision and validate real Apple signing/notary credentials in CI
-2. then build the true live ES host in Xcode and validate real callback traffic
+1. validate the packaged app + installed helper path on a clean machine
+2. provision and validate real Apple signing/notary credentials in CI
 
 ## Files to open first in the next chat
 
-- `App/XPCClient/ProtectionServiceLaunchdManager.swift`
-- `App/XPCClient/ProtectionServiceRegistration.swift`
-- `App/XPCClient/XPCProtectionServiceClient.swift`
-- `App/XPCClient/EmbeddedProtectionServiceClient.swift`
-- `Tools/ProtectionHelperCLI/main.swift`
-- `App/UI/ScopeInventoryViewModel.swift`
+- `docs/endpoint-security-xcode-integration.md`
+- `RuntimeHostSupport/EndpointSecurityRuntimeCoordinator.swift`
+- `RuntimeHostSupport/EndpointSecurityLiveMonitoringSession.swift`
+- `App/XPCClient/LocalProtectionServiceEndpoint.swift`
+- `Helper/Audit/ProtectionServiceRuntimeControlling.swift`
+- `Helper/EventSubscription/EndpointSecurityProcessAttributedEventSubscriber.swift`
+- `Installer/EndpointSecurity/entitlements.example.plist`
 - `docs/current-progress-handover.md`
 - `docs/next-steps-roadmap.md`
 

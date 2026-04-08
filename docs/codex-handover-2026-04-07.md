@@ -2,6 +2,12 @@
 
 This note captures the latest Cursor -> Codex follow-up pass and the immediate next implementation target.
 
+## Follow-up note from 2026-04-08
+
+Since this handover was written, the repo gained app-side LaunchAgent helper lifecycle controls, persisted helper configuration for the installed helper path, and automatic app-side switch to the named Mach-service boundary when that helper is loaded.
+
+That means the immediate next target is no longer app-side helper UX. The next target is the real Xcode Endpoint Security host/entitlement lane so true Google-Drive-only live blocking can work while the app is closed.
+
 ## What changed in this pass
 
 - enforced beta runtime audit-only boundary in embedded configuration by normalizing `blockKnownArtefacts` to `auditOnly`

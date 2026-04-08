@@ -11,6 +11,11 @@
 - split CI into fast unit coverage and slower packaging-smoke/release lanes
 - added anonymous and Mach-service NSXPC helper boundary paths plus launch-agent/receipt installation support
 - added launchctl bootstrap/kickstart/bootout/status lifecycle support plus helper CLI deployment commands for the packaged LaunchAgent path
+- added app-side background helper install/remove/status controls
+- added persisted helper configuration for the installed helper path and app-side reconnection to the named Mach-service boundary
+- added a shared runtime-controller seam so the protected helper boundary can consume either `HelperProtectionService` or the future live `EndpointSecurityRuntimeCoordinator`
+- added endpoint coverage for runtime-start failure reporting and synchronous startup callback delivery without queue deadlock
+- added generated GitHub release notes plus alpha/beta GitHub prerelease publication from the release workflow
 
 ### Testing
 
@@ -19,6 +24,8 @@
 ### Documentation
 
 - refreshed handover, roadmap, release packaging, and launch-checklist docs to match the new runtime/install/release boundaries, including helper launchd lifecycle support
+- added a dedicated development setup guide and an explicit beta support matrix for public docs
+- refreshed handover docs to make the Endpoint Security host/entitlement lane the primary next step for a proper prevention beta
 
 ## 2026-04-01
 

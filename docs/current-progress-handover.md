@@ -21,12 +21,17 @@ The repo is now a standalone Git repository with:
 - typed authorization primitives for future helper-bound commands
 - release packaging support for optional codesign, notarization, and stapling
 - machine-readable helper-status and provenance release artifacts
+- generated GitHub release notes derived from the packaged artifacts
 - a manual GitHub Actions workflow for building the beta app archive
+- a GitHub Actions publication path that can create or update alpha/beta prereleases and attach the packaged assets directly to GitHub Releases
 - CI split into fast unit coverage plus slower packaging smoke/release lanes
 - a verified GitHub Actions beta packaging run on `main`
 - a saved GitHub Release draft for `v0.1.0-beta.1`
 - GitHub issue templates and a public launch checklist
 - app-managed helper LaunchAgent bootstrap/bootout/status lifecycle support via the packaged helper CLI and deployment coordinator
+- app-managed helper LaunchAgent install/start/remove/status controls in the SwiftUI app
+- persisted helper protection configuration for the installed helper path
+- automatic app-side switch to the named Mach-service helper boundary when the background helper is loaded
 
 The project is still in **beta / active development**. It is not yet the final downloadable app release.
 
@@ -37,7 +42,7 @@ The latest local validation rerun on **2026-04-08** is green:
 - `swift build --product drive-icon-guard-helper`
 - `swift test`
 - `./Tools/release/build-beta-app.sh`
-- current full suite size at handoff: `78` passing tests
+- current full suite size at handoff: `81` passing tests
 
 ## What is implemented
 
@@ -58,6 +63,12 @@ The current implementation can:
 - report helper readiness as unavailable/bundled/needs-approval instead of implying live blocking is already active
 - package installer scaffold resources so the app can distinguish `bundled only` from `install plan ready`
 - expose helper runtime and install-plan readiness through the packaged helper CLI
+- install, refresh, and remove the LaunchAgent helper path directly from the app UI
+- persist helper protection configuration in Application Support for the installed helper path
+- reconnect the app to the installed helper over the named Mach-service NSXPC boundary when that helper is loaded
+- allow the protected helper boundary to accept a pluggable runtime controller instead of only the bare helper service
+- surface runtime-start failure through boundary status and command outcomes
+- deliver helper/runtime evaluations asynchronously so synchronous startup callbacks do not deadlock the endpoint queue
 - emit typed protection remediation status over shared IPC contracts
 - centralize default protection status construction through shared `ProtectionStatusFactory`
 - classify each discovered scope by:
@@ -123,7 +134,7 @@ Signed/notarized packaging is now supported by the repo tooling, but the real Ap
   - launchctl bootstrap/kickstart/status and bootstrap-failure receipt handling
   - launchctl bootout plus registration-file removal
 
-This is now beyond anonymous test IPC. The repo can write launch-agent registration and installer-driven receipts, bootstrap that registration with `launchctl`, inspect the service state, boot it out again, and run the helper as a named Mach-service host. What still remains is signed deployment, app UX around install/start/stop/status, and final caller-identity validation in the deployed environment.
+This is now beyond anonymous test IPC. The repo can write launch-agent registration and installer-driven receipts, bootstrap that registration with `launchctl`, inspect the service state, boot it out again, run the helper as a named Mach-service host, and drive that lifecycle from the app UI. What still remains is signed deployment, clean-machine packaged validation, final caller-identity validation in the deployed environment, and the real Endpoint Security host/entitlement lane.
 
 ## New Batch 5 release-hardening support now in repo
 
@@ -135,6 +146,7 @@ This is now beyond anonymous test IPC. The repo can write launch-agent registrat
   - zip checksum
   - helper-status JSON
   - provenance JSON with build/ref/checksum metadata
+- the release workflow now renders release notes from the generated artifacts and can publish them alongside the packaged assets to a GitHub prerelease entry
 - artifact verification now validates:
   - checksum correctness
   - helper-status JSON consistency
@@ -145,7 +157,7 @@ This is now beyond anonymous test IPC. The repo can write launch-agent registrat
   - slower packaging smoke verification
   - tag/manual beta release packaging
 
-This completes the repo-side work for Batch 5. The remaining release blocker is operational setup outside the repo: real Apple signing material and a working notary profile.
+This completes the repo-side work for Batch 5 publication plumbing. The remaining release blocker is operational setup outside the repo: real Apple signing material, a working notary profile, and tester-facing screenshots/polish.
 
 ## New runtime-lane support now in repo
 
@@ -154,11 +166,14 @@ This completes the repo-side work for Batch 5. The remaining release blocker is 
   - helper policy evaluation
   - `EndpointSecurityProcessAttributedEventSubscriber`
   - live Endpoint Security session start/stop wiring
+- added a shared runtime-controller contract so `LocalProtectionServiceEndpoint` and `ProtectionXPCListenerHost` can consume the live runtime coordinator without rewriting the protected helper boundary
 - implemented `SystemEndpointSecurityLiveMonitoringSession` using dynamic framework loading so SwiftPM can compile the runtime lane support without directly linking `EndpointSecurity.framework`
 - added regression tests for:
   - runtime session start success
   - runtime session start failure
   - live callback forwarding into policy evaluation
+  - protected-endpoint runtime-start failure surfacing
+  - synchronous startup callback delivery without deadlocking the endpoint queue
 
 This is still not the final signed host target. It is the repo-side runtime support that the future Xcode app/system-extension lane should consume.
 
@@ -185,11 +200,31 @@ This is still not the final signed host target. It is the repo-side runtime supp
   - the `com.apple.developer.endpoint-security.client` entitlement
   - on-device approval
 - the repo now has the runtime code that host should consume
+- the repo-side helper boundary can now consume that runtime coordinator directly once the signed Xcode host target exists
 - integration guide and template are now in-repo:
   - `docs/endpoint-security-xcode-integration.md`
   - `Installer/EndpointSecurity/entitlements.example.plist`
 - additional implementation note:
   - callback extraction now assembles create/rename new-path values using directory + filename and should be validated against real ES callback payloads in the Xcode runtime lane.
+
+## Proper beta MVP from here
+
+If the beta promise is limited to audit, review, export, cleanup preview, and a background helper install path, the repo is close.
+
+If the beta promise is true Google-Drive-only prevention while the app is closed, the must-have next step is the real Endpoint Security host lane.
+
+Must-have before that stronger beta claim:
+
+- an Xcode app or system-extension host target that links `EndpointSecurity.framework`
+- approved `com.apple.developer.endpoint-security.client` entitlement and signing/provisioning
+- live `es_new_client` / `es_subscribe` callback flow verified against real traffic
+- confirmation that the installed helper can stay armed through the real closed-app path rather than the current preflight/runtime-placeholder event source
+
+Still important, but secondary to that host-lane work:
+
+- real Apple signing/notary credentials in CI
+- clean-machine packaged install/bootstrap/reconnect validation
+- screenshots and public beta notes that match the shipped behavior exactly
 
 ## Testing and toolchain note
 
@@ -199,16 +234,19 @@ Local testing can be misleading on machines that use only Apple Command Line Too
 
 ## Recommended next steps
 
-1. Replace replay-only helper input with a real Endpoint Security event source and system-extension packaging.
-2. Provision and validate the real Apple signing/notary credentials used by the hardened release lane.
-3. Move the packaged helper lifecycle into real app UX and deployed helper trust validation.
+1. Finish the Xcode host/entitlement lane for real Endpoint Security callback traffic.
+2. Validate the packaged app + installed helper path on a clean machine after that live lane is in place.
+3. Provision and validate the real Apple signing/notary credentials used by the hardened release lane.
 
 ## Planned next-step execution (handover-ready)
 
-### Phase 1: stabilize live path
+### Phase 1: Endpoint Security host and live path
 
+- create or adopt the Xcode app/system-extension host target
+- link `EndpointSecurity.framework` and attach the approved entitlement/profile
 - finalize Xcode runtime lane for Endpoint Security callback ingestion
 - validate create/rename/unlink path extraction under real ES events
+- prove end-to-end callback delivery into the installed helper boundary
 - keep beta audit-only guard enabled until live-path confidence criteria pass
 
 ### Phase 2: performance and reliability
@@ -247,7 +285,8 @@ The repo-side follow-up passes for the Cursor -> Codex review item are complete:
 - monitor shutdown now prevents post-stop cleanup work
 - release artifact verification now passes end-to-end
 - ES subscriber runtime entrypoints and docs are aligned
-- latest validation rerun is green (`swift test`: 78 passing)
+- protected helper boundary now accepts the future live runtime coordinator and surfaces runtime-start failure cleanly
+- latest validation rerun is green (`swift test`: 81 passing)
 
 ## Key docs
 

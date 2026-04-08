@@ -2,6 +2,19 @@
 
 This note reviews the current uncommitted Cursor worktree on top of `main` and turns it into a concrete next-step plan.
 
+## Follow-up status from later 2026-04-08 work
+
+The issues called out in findings 1 through 5 were addressed in subsequent repo work:
+
+- monitor shutdown behavior was fixed and regression-covered
+- beta artifact verification was repaired and exercised by the packaging lane
+- the documented live Endpoint Security integration entrypoint was made callable from the embedding target
+- preflight status semantics were moved away from misleading hard-failure reporting
+- app-side LaunchAgent helper lifecycle controls were added
+- persisted helper configuration restore for the installed helper path was added
+
+That means this review should now be read mainly as background context for how the repo reached its current state. The immediate next product step is no longer helper UX hardening. It is the signed Xcode Endpoint Security host and entitlement lane required for true Google-Drive-only live blocking while the app is closed.
+
 ## Repo state at review time
 
 - branch: `main`
@@ -116,29 +129,28 @@ Impact:
 
 ## Recommended next steps
 
-1. Fix `ScopeEnforcementMonitor.stop()` so it disables enforcement, not just callbacks.
-2. Replace the weak stop test with one that proves artefacts are not deleted after shutdown.
-3. Fix `Tools/release/verify-beta-artifacts.sh` to pass JSON to Python correctly, then run the full beta packaging script end-to-end.
-4. Expose a real ES live-callback integration API or rewrite the doc to match the intended embedding model.
-5. Change ES preflight status semantics from `.error` to a non-failure state such as `.bundled` or `.needsApproval`.
-6. After the above, continue with the Xcode-linked live ES lane: entitlement, `es_new_client`, subscription, and real callback validation.
+1. Build the signed Xcode host or system-extension target that links `EndpointSecurity.framework`.
+2. Attach the approved `com.apple.developer.endpoint-security.client` entitlement and signing profile.
+3. Validate real `es_new_client` / `es_subscribe` callback delivery into the existing runtime coordinator.
+4. Prove the installed helper boundary stays armed through that live path while the app is closed.
+5. Then rerun packaged clean-machine validation and signing/notarization checks against the real live lane.
 
 ## Suggested execution plan
 
-### Phase 1: unblock correctness
+### Phase 1: complete the live Endpoint Security host lane
 
-- fix monitor shutdown behavior
-- fix release verification script
-- tighten the affected regression tests
+- create or adopt the signed Xcode host target
+- attach the approved entitlement and provisioning profile
+- validate live create/rename/unlink callback delivery under real traffic
 
-### Phase 2: unblock the ES handoff
+### Phase 2: prove closed-app helper continuity
 
-- make the live callback entrypoint callable from the embedding target
-- align the integration guide with the actual API surface
-- clean up status transitions so preflight, ready, and failure states are distinct
+- keep the installed helper armed through the named Mach-service boundary
+- confirm the app can exit while protection state remains available through the host lane
+- keep the shipped product claim at audit-first until this path is proven
 
-### Phase 3: complete the next product slice
+### Phase 3: release hardening against the real live path
 
-- wire the Xcode/system-extension live ES client
-- validate create/rename/unlink extraction with real callbacks
-- only then revisit any movement from audit-only toward real blocking
+- rerun packaged install/bootstrap/reconnect validation on a clean machine
+- validate signing/notarization and release asset attachment
+- only then consider broadening the public beta promise toward true prevention

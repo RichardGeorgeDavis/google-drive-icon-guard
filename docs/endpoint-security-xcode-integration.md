@@ -2,6 +2,18 @@
 
 The Swift package builds the helper and libraries without linking `EndpointSecurity.framework` at link time. Live `es_new_client` / `es_subscribe` must run in a target that links the framework and carries the correct entitlement. Use this guide when you add an Xcode app or system extension that consumes `DriveIconGuardHelper`.
 
+## Why this is the next critical step
+
+The repo already has:
+
+- app-side background helper install/remove/status controls
+- a named Mach-service helper boundary
+- persisted helper configuration for the installed helper path
+- runtime-support code that can consume live Endpoint Security callbacks
+- a protected helper boundary that can now accept `EndpointSecurityRuntimeCoordinator` directly through the shared runtime-controller contract
+
+What it does **not** yet have is the real signed Xcode host target and entitlement path that can supply live Endpoint Security traffic. Until this guide is carried through in a real target, the product must stay positioned as audit-first beta behavior rather than true closed-app prevention.
+
 ## Prerequisites
 
 - Apple Developer Program membership for the Endpoint Security entitlement.
@@ -63,9 +75,10 @@ Lower-level subscriber APIs remain available when needed. `EndpointSecurityProce
 Recommended runtime-host flow:
 
 1. Instantiate `EndpointSecurityRuntimeCoordinator`.
-2. Call `updateScopes(...)` with the currently protected scopes.
-3. Call `start { evaluation in … }` to begin live monitoring and receive policy evaluations.
-4. On shutdown, call `stop()`.
+2. Inject that coordinator into the protected helper boundary (`LocalProtectionServiceEndpoint` directly, or `ProtectionXPCListenerHost` for the NSXPC host path).
+3. Call `updateScopes(...)` with the currently protected scopes before starting live monitoring.
+4. Call `start { evaluation in … }` to begin live monitoring and receive policy evaluations.
+5. On shutdown, call `stop()`.
 
 Minimal example:
 
@@ -80,11 +93,28 @@ try coordinator.start { evaluation in
 }
 ```
 
+Protected-boundary host example:
+
+```swift
+import DriveIconGuardRuntimeSupport
+import DriveIconGuardXPCClient
+
+let coordinator = EndpointSecurityRuntimeCoordinator()
+let endpoint = LocalProtectionServiceEndpoint(service: coordinator)
+let host = ProtectionXPCListenerHost(
+    machServiceName: "com.richardgeorgedavis.google-drive-icon-guard.beta.helper",
+    serviceEndpoint: endpoint
+)
+
+_ = host
+```
+
 Notes:
 
 - `start(eventHandler:)` should not itself emit a synthetic policy event. It only arms the runtime handler and leaves the subscriber in a bundled/non-ready state until real live callbacks are dispatched.
 - use `handleLiveRawEvent(_:)` only outside the direct ES callback path, such as unit tests or intermediate adapters.
 - `EndpointSecurityRuntimeCoordinator` marks the subscriber `ready` once the live ES client is successfully subscribed.
+- `LocalProtectionServiceEndpoint` now reports runtime-start failure as a protected-boundary command/status failure instead of silently falling back to idle behavior.
 
 ## 5. Order of operations
 
@@ -96,6 +126,19 @@ Notes:
 ## 6. SwiftPM-only beta builds
 
 The command-line helper built with `swift build` continues to use preflight / status-only behavior until this Xcode-linked path is used. During this phase the subscriber may report a bundled/non-ready state after `start(eventHandler:)`; that is expected. The runtime-support library compiles the real ES client/session wiring, but entitlement approval and an Xcode-hosted signed target are still required before live monitoring can run successfully.
+
+## Immediate acceptance criteria for this host lane
+
+Treat this work as done only when all of the following are true:
+
+1. a signed Xcode app or system-extension target links `EndpointSecurity.framework`
+2. that target has a provisioning profile carrying `com.apple.developer.endpoint-security.client`
+3. `EndpointSecurityRuntimeCoordinator.start(...)` succeeds on-device
+4. real create/rename/unlink callbacks reach `handleLiveEndpointSecurityMessage(_:)`
+5. the subscriber transitions to `.ready` under real traffic
+6. the installed helper boundary can stay armed through the closed-app path rather than only the embedded/test path
+
+Until then, keep the shipped product claim at audit/review/helper-readiness and not true prevention.
 
 ## References
 

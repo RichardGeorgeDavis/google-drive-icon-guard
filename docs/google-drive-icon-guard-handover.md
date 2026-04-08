@@ -4,6 +4,17 @@ This is the original product and architecture handover.
 
 For the current implemented repo state, use [current-progress-handover.md](./current-progress-handover.md).
 
+## Current implementation note
+
+Since this original handover was written, the repo has already moved beyond pure discovery scaffolding. It now includes:
+
+- app-side LaunchAgent helper install/remove/status controls
+- persisted helper configuration for the installed helper path
+- a named Mach-service XPC boundary the app can reconnect to when that helper is loaded
+- runtime-support code intended for a signed Xcode Endpoint Security host target
+
+The main missing piece for a proper prevention beta is now the signed Xcode host and entitlement path for real Endpoint Security traffic. Read this document as product and architecture intent; use [endpoint-security-xcode-integration.md](./endpoint-security-xcode-integration.md), [next-steps-roadmap.md](./next-steps-roadmap.md), and [current-progress-handover.md](./current-progress-handover.md) for the active next-step plan.
+
 ## Project summary
 
 Build a macOS product that identifies **all Google Drive-managed locations** on a Mac and applies **narrow, process-aware icon artefact prevention** only where it is safe and supported.

@@ -5,9 +5,10 @@
 Start with:
 
 1. [README.md](../README.md)
-2. [docs/milestone-1-scope-inventory.md](../docs/milestone-1-scope-inventory.md)
+2. [docs/development-setup.md](../docs/development-setup.md)
 3. [docs/first-run-and-troubleshooting.md](../docs/first-run-and-troubleshooting.md)
-4. existing issues and discussions, if available
+4. [docs/beta-release-packaging.md](../docs/beta-release-packaging.md)
+5. existing issues and discussions, if available
 
 ## Where to open issues
 

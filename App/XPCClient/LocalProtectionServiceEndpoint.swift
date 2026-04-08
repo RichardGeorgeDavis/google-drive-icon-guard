@@ -8,6 +8,7 @@ public enum ProtectionServiceBoundaryFailureReason: String, Codable, Equatable, 
     case callerIdentityUntrusted
     case invalidConfiguration
     case installationNotReady
+    case runtimeStartFailed
 }
 
 public struct ProtectionServiceCommandOutcome: Codable, Equatable, Sendable {
@@ -35,29 +36,38 @@ public struct ProtectionServiceCommandOutcome: Codable, Equatable, Sendable {
 public final class LocalProtectionServiceEndpoint: @unchecked Sendable {
     public typealias EventHandler = @Sendable ([ProtectionServiceEventPayload]) -> Void
 
-    private let service: HelperProtectionService
+    private let runtimeController: any ProtectionServiceRuntimeControlling
     private let authorizer: ProtectionServiceAuthorizer
     private let installationStatusResolver: ProtectionInstallationStatusResolver
+    private let configurationStore: ProtectionServiceConfigurationStore
     private let queue: DispatchQueue
 
     private var configuration = ProtectionServiceConfiguration(liveProtectionEnabled: false, scopes: [])
     private var eventHandler: EventHandler?
     private var isStarted = false
+    private var runtimeStartFailureDetail: String?
 
     public init(
-        service: HelperProtectionService = HelperProtectionService(),
+        service: any ProtectionServiceRuntimeControlling = HelperProtectionService(),
         authorizer: ProtectionServiceAuthorizer = ProtectionServiceAuthorizer(),
         installationStatusResolver: ProtectionInstallationStatusResolver = ProtectionInstallationStatusResolver(),
+        configurationStore: ProtectionServiceConfigurationStore = ProtectionServiceConfigurationStore(),
         queue: DispatchQueue = DispatchQueue(label: "DriveIconGuard.LocalProtectionServiceEndpoint")
     ) {
-        self.service = service
+        self.runtimeController = service
         self.authorizer = authorizer
         self.installationStatusResolver = installationStatusResolver
+        self.configurationStore = configurationStore
         self.queue = queue
+        self.configuration = (try? configurationStore.load()) ?? ProtectionServiceConfiguration(
+            liveProtectionEnabled: false,
+            scopes: []
+        )
+        restorePersistedConfigurationIfPossible()
     }
 
     deinit {
-        service.stop()
+        runtimeController.stop()
     }
 
     public var helperExecutablePath: String? {
@@ -108,16 +118,17 @@ public final class LocalProtectionServiceEndpoint: @unchecked Sendable {
                     return installationFailureOutcome(for: .startProtection, installationStatus: installStatus)
                 }
 
-                if !isStarted {
-                    service.start { [weak self] evaluation in
-                        self?.queue.sync {
-                            self?.eventHandler?([Self.makePayload(from: evaluation)])
-                        }
-                    }
-                    isStarted = true
+                runtimeController.updateScopes(protectedScopes(from: configuration))
+
+                do {
+                    try startRuntimeIfNeeded()
+                } catch {
+                    return runtimeFailureOutcome(
+                        for: .startProtection,
+                        detail: "Helper service boundary could not start the live runtime: \(error.localizedDescription)"
+                    )
                 }
 
-                service.updateScopes(protectedScopes(from: configuration))
                 let status = currentStatus()
                 return acceptedOutcome(
                     command: .startProtection,
@@ -132,9 +143,8 @@ public final class LocalProtectionServiceEndpoint: @unchecked Sendable {
     public func stop(context: ProtectionServiceAuthorizationContext) -> ProtectionServiceCommandOutcome {
         queue.sync {
             guard let denied = authorizationFailureOutcome(for: .stopProtection, context: context) else {
-                service.stop()
-                service.updateScopes([])
-                isStarted = false
+                runtimeController.updateScopes([])
+                stopRuntime()
                 let status = currentStatus()
                 return acceptedOutcome(
                     command: .stopProtection,
@@ -162,8 +172,34 @@ public final class LocalProtectionServiceEndpoint: @unchecked Sendable {
                 }
 
                 self.configuration = configuration
-                if isStarted {
-                    service.updateScopes(protectedScopes(from: configuration))
+                do {
+                    try configurationStore.persist(configuration)
+                } catch {
+                    return validationFailureOutcome(
+                        for: .updateConfiguration,
+                        detail: "Protection configuration could not be persisted for the installed helper: \(error.localizedDescription)"
+                    )
+                }
+
+                let protectedScopes = protectedScopes(from: configuration)
+
+                if protectedScopes.isEmpty {
+                    runtimeController.updateScopes([])
+                    if isStarted {
+                        stopRuntime()
+                    }
+                } else {
+                    runtimeController.updateScopes(protectedScopes)
+                    if !isStarted {
+                        do {
+                            try startRuntimeIfNeeded()
+                        } catch {
+                            return runtimeFailureOutcome(
+                                for: .updateConfiguration,
+                                detail: "Protection configuration was saved, but the live runtime could not start: \(error.localizedDescription)"
+                            )
+                        }
+                    }
                 }
 
                 let status = currentStatus()
@@ -249,10 +285,26 @@ public final class LocalProtectionServiceEndpoint: @unchecked Sendable {
         }
     }
 
+    private func restorePersistedConfigurationIfPossible() {
+        let installStatus = installationStatusResolver.resolve()
+        let protectedScopes = protectedScopes(from: configuration)
+        guard installStatus.state == .installed, !protectedScopes.isEmpty else {
+            return
+        }
+
+        runtimeController.updateScopes(protectedScopes)
+
+        do {
+            try startRuntimeIfNeeded()
+        } catch {
+            runtimeStartFailureDetail = "Persisted helper configuration was restored, but the live runtime could not start: \(error.localizedDescription)"
+        }
+    }
+
     private func currentStatus(detail overrideDetail: String? = nil) -> ProtectionServiceStatusSnapshot {
         let helperPath = installationStatusResolver.helperExecutablePath
         let installationStatus = installationStatusResolver.resolve(helperPath: helperPath)
-        let eventSourceStatus = service.runtimeStatus()
+        let eventSourceStatus = runtimeController.runtimeStatus()
         let protectedScopeCount = protectedScopes(from: configuration).count
 
         let detail: String
@@ -269,6 +321,9 @@ public final class LocalProtectionServiceEndpoint: @unchecked Sendable {
             mode = .helperAvailable
         } else if installationStatus.state != .installed {
             detail = "Helper service boundary is present, but high-risk commands remain blocked until installation is verified as installed."
+            mode = .helperAvailable
+        } else if let runtimeStartFailureDetail {
+            detail = runtimeStartFailureDetail
             mode = .helperAvailable
         } else if !isStarted || !configuration.liveProtectionEnabled {
             detail = "Helper service boundary is idle. Live protection is disabled or not started."
@@ -344,6 +399,20 @@ public final class LocalProtectionServiceEndpoint: @unchecked Sendable {
         )
     }
 
+    private func runtimeFailureOutcome(
+        for command: ProtectionServiceCommand,
+        detail: String
+    ) -> ProtectionServiceCommandOutcome {
+        runtimeStartFailureDetail = detail
+        return ProtectionServiceCommandOutcome(
+            command: command,
+            accepted: false,
+            detail: detail,
+            failureReason: .runtimeStartFailed,
+            status: currentStatus(detail: detail)
+        )
+    }
+
     private func validationFailureOutcome(
         for command: ProtectionServiceCommand,
         detail: String
@@ -355,6 +424,31 @@ public final class LocalProtectionServiceEndpoint: @unchecked Sendable {
             failureReason: .invalidConfiguration,
             status: currentStatus(detail: detail)
         )
+    }
+
+    private func startRuntimeIfNeeded() throws {
+        guard !isStarted else {
+            runtimeStartFailureDetail = nil
+            return
+        }
+
+        try runtimeController.start(evaluationHandler: makeEvaluationHandler())
+        isStarted = true
+        runtimeStartFailureDetail = nil
+    }
+
+    private func stopRuntime() {
+        runtimeController.stop()
+        isStarted = false
+        runtimeStartFailureDetail = nil
+    }
+
+    private func makeEvaluationHandler() -> @Sendable (HelperProtectionEvaluation) -> Void {
+        { [weak self] evaluation in
+            self?.queue.async {
+                self?.eventHandler?([Self.makePayload(from: evaluation)])
+            }
+        }
     }
 
     private func acceptedOutcome(

@@ -72,7 +72,10 @@ Current implementation progress:
 - added a local protected service endpoint and boundary-backed client that enforce these checks end-to-end in-process
 - added an anonymous NSXPC listener/client path that exercises the same boundary over real IPC inside SwiftPM
 - added launch-agent registration, receipt writing, helper CLI install commands, named Mach-service client/host path, and launchctl bootstrap/bootout/status lifecycle support
-- remaining work is signed deployed-helper packaging, app install/start/stop/status UX, and final deployed caller-identity validation
+- added app-side install/start/remove/status actions for the LaunchAgent helper path
+- added persisted helper configuration so the installed helper can restore the last-known scope set
+- added a shared runtime-controller seam so the protected helper boundary can switch from `HelperProtectionService` to `EndpointSecurityRuntimeCoordinator` without rewriting the XPC/install surface
+- remaining work is signed deployed-helper packaging, clean-machine packaged validation, final deployed caller-identity validation, and the real Endpoint Security host lane
 
 ### Batch 5: release hardening
 
@@ -92,16 +95,28 @@ Current implementation progress:
 - release packaging now emits helper-status plus provenance JSON artifacts
 - release packaging now supports optional codesign, notarization, stapling, and CMS provenance signing when identities/profiles are supplied
 - CI is now split between fast unit tests and a slower packaging smoke lane
-- remaining work is operational: provision real Apple signing credentials, validate notarization in CI, and attach hardened artifacts to Releases
+- release publication can now create or update alpha/beta GitHub prereleases and attach the packaged assets directly to Releases
+- remaining work is operational: provision real Apple signing credentials, validate notarization in CI, and add screenshots/public release polish
 
 ## 30/60/90 day plan
 
 ### 30 days (stabilize + measure)
 
-- complete Xcode live ES runtime wiring and verify callback-path correctness under real traffic
+- complete the Xcode host/entitlement lane and verify callback-path correctness under real traffic
 - add performance telemetry for refresh latency, monitor cycle interval, and remediation execution time
 - split CI into fast unit lane vs filesystem/integration lane for faster PR feedback
 - define release trust gate checklist (checksum, signing, notarization, provenance)
+
+## MVP beta from here
+
+For a proper MVP beta that can truthfully claim prevention while the app is closed, the next step order is:
+
+1. finish the Xcode Endpoint Security host target and entitlement path
+2. validate real callback delivery into the installed helper boundary
+3. test the packaged app + background helper flow on a clean machine
+4. provision real signing/notarization and verify the published prerelease assets on a clean machine
+
+If that first item is not complete, keep the public beta claim at audit/review/helper-readiness rather than true prevention.
 
 ### 60 days (harden + scale)
 
@@ -119,10 +134,10 @@ Current implementation progress:
 
 ## Immediate engineering priorities
 
-1. Move the helper lifecycle from CLI/coordinator wiring into app install/start/stop/status UX
-2. Validate Batch 5 with real Apple signing/notary credentials in CI
-3. Attach the hardened archive, checksum, and provenance files to the next beta Release
-4. Keep the Xcode live ES lane behind audit-only product claims until real entitlement-backed traffic is proven
+1. Finish the Xcode Endpoint Security host target, entitlement, and live callback validation
+2. Validate the packaged app + installed helper boundary on a clean machine once that live lane exists
+3. Validate Batch 5 with real Apple signing/notary credentials in CI
+4. Validate the published prerelease entry, attached assets, and release notes on the next tester build
 5. Then move to operator readiness UX and policy-profile expansion
 
 ## Performance optimization track

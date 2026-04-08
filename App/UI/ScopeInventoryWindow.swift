@@ -317,6 +317,7 @@ struct ScopeInventoryWindow: View {
                                 metadataLabel("Scope", value: scope.scopeKind.rawValue)
                                 metadataLabel("Volume", value: scope.volumeKind.rawValue)
                                 metadataLabel("Filesystem", value: scope.fileSystemKind.rawValue)
+                                metadataLabel("Confidence", value: scopeConfidenceLabel(scope.source))
                                 if let accountID = scope.accountID, !accountID.isEmpty {
                                     metadataLabel("Account", value: accountID)
                                 }
@@ -459,6 +460,16 @@ struct ScopeInventoryWindow: View {
 
             Text(plan.recommendedAction)
                 .foregroundStyle(.secondary)
+
+            HStack(spacing: 10) {
+                metadataLabel("Source", value: scope.source.rawValue)
+                metadataLabel("Confidence", value: scopeConfidenceLabel(scope.source))
+                metadataLabel("Support", value: scope.supportStatus.rawValue)
+                metadataLabel("Volume", value: scope.volumeKind.rawValue)
+                metadataLabel("Filesystem", value: scope.fileSystemKind.rawValue)
+            }
+            .font(.caption)
+            .foregroundStyle(.secondary)
 
             primaryScopeActionBar(scope: scope)
 
@@ -1038,6 +1049,53 @@ struct ScopeInventoryWindow: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
+
+            if let helperServiceStatus = viewModel.helperServiceStatus {
+                HStack(spacing: 10) {
+                    badge(helperServiceStatus.isLoaded ? "launchd loaded" : "launchd not loaded", tint: helperServiceStatus.isLoaded ? .green : .orange)
+                    metadataLabel("Service", value: helperServiceStatus.serviceTarget)
+                }
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+                Text(helperServiceStatus.detail)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .textSelection(.enabled)
+            }
+
+            HStack(spacing: 12) {
+                Button(viewModel.protectionStatus.installationState == .installed ? "Reinstall + Restart Helper" : "Install Background Helper") {
+                    viewModel.installAndStartHelperService()
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(viewModel.isUpdatingHelperService || viewModel.protectionStatus.helperExecutablePath == nil)
+
+                Button("Refresh Helper Status") {
+                    viewModel.refreshHelperServiceStatus()
+                }
+                .disabled(viewModel.isUpdatingHelperService)
+
+                Button("Remove Installed Helper") {
+                    viewModel.removeInstalledHelperService()
+                }
+                .disabled(viewModel.isUpdatingHelperService || viewModel.protectionStatus.installationState != .installed)
+            }
+
+            if viewModel.isUpdatingHelperService {
+                ProgressView("Updating helper service…")
+                    .controlSize(.small)
+            }
+
+            if let helperLifecycleMessage = viewModel.helperLifecycleMessage {
+                Text(helperLifecycleMessage)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Text("Installed helper lifecycle is now handled from the app, but true Google-Drive-only live blocking while the app is closed still depends on the real Endpoint Security host lane becoming ready.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(16)
@@ -1196,6 +1254,17 @@ struct ScopeInventoryWindow: View {
             return .orange
         case .unsupported:
             return .red
+        }
+    }
+
+    private func scopeConfidenceLabel(_ source: ScopeSource) -> String {
+        switch source {
+        case .confirmed:
+            return "confirmed"
+        case .config:
+            return "config-backed"
+        case .inferred:
+            return "inferred"
         }
     }
 

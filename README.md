@@ -8,6 +8,22 @@ The current beta does that conservatively for now: it discovers Google Drive-man
 
 This repository is currently in active development and should be treated as **beta**. The current codebase is still in the inventory and audit stage, not the final app release stage.
 
+If you found this repo while searching for a fix for Google Drive hidden files on Mac, that is the right problem space. This project is specifically about Google Drive for desktop on macOS creating or preserving invisible Finder icon artefacts such as `Icon\r` and `._*`, but the current public build is still a beta diagnostic and audit tool rather than a finished one-click fix.
+
+## Common Search Symptoms
+
+People usually land here while searching for things like:
+
+- `google drive hidden files mac`
+- `google drive creates icon files on mac`
+- `Icon\\r files google drive`
+- `._ files google drive mac`
+- `google drive invisible files finder metadata`
+- `google drive folder icons syncing to external drive`
+- `mac google drive keeps creating hidden icon files`
+
+This repo is intended to help with that class of problem by making the affected Google Drive-managed locations visible, measuring the artefacts, and preparing for narrower prevention in supported scopes.
+
 ## What This App Aims To Be
 
 The intended final release is a downloadable macOS app, not just a source-only CLI.
@@ -32,7 +48,7 @@ Planned components:
 - a helper/service boundary for later narrow, process-aware protection work
 - installer/setup flow for registering that helper only when the project reaches that stage
 
-The current public beta now bundles a standalone helper host binary plus installer scaffold resources, but it still does **not** ship the final installed helper/service or system-extension registration flow. Live Google-Drive-only blocking remains pending real macOS process-attributed events.
+The current public beta now bundles a standalone helper host binary plus installer scaffold resources. The app can now install, refresh, and remove the background LaunchAgent helper path for beta evaluation, but it still does **not** ship the final entitlement-backed Endpoint Security host/system-extension flow required for true Google-Drive-only live blocking while the app is closed.
 
 The repo now also includes a runtime-support library for an Xcode-hosted live Endpoint Security lane:
 
@@ -53,7 +69,7 @@ Current beta packaging:
 - built from the current SwiftUI app shell
 - bundles the viewer plus a standalone helper host binary
 - packages helper install-plan scaffold resources
-- still no real installed helper/service or system-extension registration flow
+- app-managed helper lifecycle is available for the current LaunchAgent-based beta path, but there is still no entitlement-backed system-extension/runtime host flow for true live blocking
 
 Build it locally with:
 
@@ -80,6 +96,14 @@ On macOS, hidden files like `Icon\r` and `._*` can quietly multiply when folder 
 
 This app was built to tackle that problem. On my own Mac, those hidden artefacts grew to **40,000+ files using more than 6 GB** of space. The goal is simple: identify where Google Drive is managing files, surface the hidden icon clutter building up behind the scenes, and ultimately stop Google Drive from repeatedly generating that invisible mess in places where it is safe to do so.
 
+In practical terms, this repo is for people dealing with symptoms such as:
+
+- Google Drive for desktop creating invisible files on macOS
+- repeated `Icon\r` files inside synced folders
+- `._*` AppleDouble sidecar files multiplying in Google Drive locations
+- Finder folder icon metadata leaking into mirrored or backup roots
+- sync noise, storage bloat, or cleanup churn caused by hidden icon artefacts
+
 ## Current Development Status
 
 The repo is currently centered on **inventory, review, and helper scaffolding**, with live Google-Drive-only blocking still gated behind OS-specific integration.
@@ -98,10 +122,19 @@ Right now the codebase can:
 - show recent snapshots and current-versus-previous history deltas in the viewer
 - package a standalone helper host for replay/test protection evaluation
 - expose helper runtime/install readiness in the app and helper CLI
+- install, refresh, and remove the background LaunchAgent helper path from the app UI
+- persist helper protection configuration so the installed helper can restore its last-known scope set
+- switch the app to the installed Mach-service helper boundary when that background helper is loaded
 - package installer scaffold resources so the build can report `installPlanReady`
 - open a lightweight SwiftUI app shell for discovered scopes via `swift run drive-icon-guard-viewer`
 
-It does **not** yet ship a real installed helper, live Endpoint Security event source, or the final Google-Drive-only blocking path.
+It does **not** yet ship the real Endpoint Security host target, approved entitlement path, or final Google-Drive-only live blocking path needed for true closed-app prevention.
+
+## Test Builds
+
+Alpha and beta tester builds can now be published directly through GitHub Releases with the packaged zip, checksum, helper-status JSON, and provenance JSON attached to the release entry.
+
+Those releases should still be treated as prereleases. Even when the packaging lane is green, the shipped claim remains audit-first until the entitlement-backed Endpoint Security host lane exists.
 
 What is now in place for the next stage:
 
@@ -150,6 +183,7 @@ This machine is now using full Xcode successfully, and the repo also includes a 
 - [Project handover](./docs/google-drive-icon-guard-handover.md)
 - [Current progress handover](./docs/current-progress-handover.md)
 - [Changelog](./docs/CHANGELOG.md)
+- [Development setup](./docs/development-setup.md)
 - [Beta release packaging](./docs/beta-release-packaging.md)
 - [Milestone 1 scope discovery notes](./docs/milestone-1-scope-inventory.md)
 - [First-run guidance and troubleshooting](./docs/first-run-and-troubleshooting.md)
