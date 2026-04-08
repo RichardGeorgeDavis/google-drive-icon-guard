@@ -147,8 +147,8 @@ That fallback can support a "background cleanup" beta, but it is not a substitut
 2. Validate the packaged app + installed helper boundary on a clean machine once that live lane exists
 3. Validate Batch 5 with real Apple signing/notary credentials in CI
 4. Validate the published prerelease entry, attached assets, and release notes on the next tester build
-5. Add helper version drift detection so installed helpers can be upgraded intentionally
-6. Tighten operator readiness UX: clearer history/log filtering, recent-activity summary, and top-level supported cleanup action
+5. Validate the new helper drift/update state against stale, mismatched, and moved packaged installs
+6. Extend typed activity export/reporting and refine retained aggregate cleanup outcome visibility
 7. Then move to policy-profile expansion
 
 Fallback priority order if entitlement/signing work is blocked:

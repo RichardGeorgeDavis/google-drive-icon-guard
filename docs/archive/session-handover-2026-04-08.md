@@ -5,8 +5,8 @@ This note is the shortest reliable handoff for the next chat.
 ## Repo state at handoff
 
 - branch: `main`
-- worktree: dirty, with substantial uncommitted tracked and untracked changes already in place
-- no git cleanup, staging, commit, or branch work was done in this pass
+- worktree: clean
+- latest implementation commits from this handoff line are now on `origin/main`
 
 ## What is now implemented
 
@@ -47,6 +47,9 @@ This note is the shortest reliable handoff for the next chat.
   - main-screen build/source/support diagnostics
   - stronger Live Protection failure callouts
   - dedicated History and Logs views backed by persisted snapshots and activity events
+  - helper build drift detection plus explicit `Update Helper`
+  - typed activity categories/severity, filtered logs, and a main-screen `Recent Activity` summary
+  - a top-level aggregate `Run Cleanup` flow for supported findings
 
 ## Current product boundary
 
@@ -75,7 +78,7 @@ These commands were run successfully on 2026-04-08:
 
 Latest full test count at handoff:
 
-- `83` passing tests
+- `87` passing tests
 
 ## Best next coding target
 
@@ -92,8 +95,18 @@ After that:
 
 1. validate the packaged app + installed helper path on a clean machine
 2. provision and validate real Apple signing/notary credentials in CI
-3. add helper version/update detection instead of relying only on reinstall
-4. tighten the operator UX with clearer logs/history surfacing and a top-level cleanup action for supported findings
+3. validate the new helper update state, typed logs, and aggregate cleanup UX against packaged builds
+4. keep the public product wording audit-first until the Apple entitlement lane exists
+
+## External blocker note
+
+If the Apple Developer Program / Endpoint Security entitlement lane is unavailable, the only practical near-term fallback is a background post-write cleanup helper.
+
+That fallback is useful, but it is not equivalent to true prevention:
+
+- it is cleanup after write, not deny-before-write blocking
+- it cannot make a truthful Google-Drive-only writer claim
+- it must be described as cleanup/background guard, not live blocking
 
 ## Files to open first in the next chat
 

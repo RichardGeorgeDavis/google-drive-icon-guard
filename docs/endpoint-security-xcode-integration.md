@@ -157,5 +157,5 @@ That path can support a useful "background cleanup" beta, but it does not satisf
 ## References
 
 - In-repo state transition notes: [protection-status-state-transitions.md](./protection-status-state-transitions.md)
-- Codex handover: [codex-handover-2026-04-07.md](./codex-handover-2026-04-07.md)
+- Historical Codex handover: [archive/codex-handover-2026-04-07.md](./archive/codex-handover-2026-04-07.md)
 - App/helper boundary notes: `App/XPCClient/README.md` and `Shared/IPC/README.md`

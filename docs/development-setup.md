@@ -96,4 +96,4 @@ sudo xcodebuild -license accept
 - for troubleshooting: [First-run guidance and troubleshooting](./first-run-and-troubleshooting.md)
 - for contribution expectations: [Contributing](../.github/CONTRIBUTING.md)
 - for current repo scope and boundaries: [Milestone 1 scope discovery notes](./milestone-1-scope-inventory.md)
-- for deeper architecture context: [Project handover](./google-drive-icon-guard-handover.md)
+- for deeper architecture context: [Architecture](./architecture.md)

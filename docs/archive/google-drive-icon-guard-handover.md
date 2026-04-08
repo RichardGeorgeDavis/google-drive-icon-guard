@@ -2,7 +2,7 @@
 
 This is the original product and architecture handover.
 
-For the current implemented repo state, use [current-progress-handover.md](./current-progress-handover.md).
+For the current implemented repo state, use [current-state.md](../current-state.md) and [current-progress-handover.md](../current-progress-handover.md).
 
 ## Current implementation note
 
@@ -13,7 +13,7 @@ Since this original handover was written, the repo has already moved beyond pure
 - a named Mach-service XPC boundary the app can reconnect to when that helper is loaded
 - runtime-support code intended for a signed Xcode Endpoint Security host target
 
-The main missing piece for a proper prevention beta is now the signed Xcode host and entitlement path for real Endpoint Security traffic. Read this document as product and architecture intent; use [endpoint-security-xcode-integration.md](./endpoint-security-xcode-integration.md), [next-steps-roadmap.md](./next-steps-roadmap.md), and [current-progress-handover.md](./current-progress-handover.md) for the active next-step plan.
+The main missing piece for a proper prevention beta is now the signed Xcode host and entitlement path for real Endpoint Security traffic. Read this document as product and architecture intent; use [endpoint-security-xcode-integration.md](../endpoint-security-xcode-integration.md), [roadmap.md](../roadmap.md), and [current-progress-handover.md](../current-progress-handover.md) for the active next-step plan.
 
 If that Apple entitlement lane is unavailable, the nearest fallback is a background post-write cleanup helper. That fallback is useful, but it is not equivalent to true process-aware prevention and should be described as cleanup/neutralization rather than blocking.
 

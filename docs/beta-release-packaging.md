@@ -121,7 +121,7 @@ The repo now splits release validation into two lanes:
 - import the real Developer ID certificate into CI or the maintainer keychain
 - configure the `notarytool` keychain profile used by the release lane
 - decide whether the provenance CMS signature should use the same identity or a dedicated signing identity
-- add screenshots to the GitHub release notes
+- keep the GitHub release notes aligned with the current real-app screenshots and support wording
 
 ## GitHub prerelease publication
 

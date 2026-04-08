@@ -1,0 +1,11 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Current state
+    url: https://github.com/RichardGeorgeDavis/google-drive-icon-guard/blob/main/docs/current-state.md
+    about: Read the fastest summary of what works, what is blocked, and what help is needed.
+  - name: Help wanted
+    url: https://github.com/RichardGeorgeDavis/google-drive-icon-guard/blob/main/docs/help-wanted.md
+    about: See the Apple platform, testing, and contributor asks before opening a broad issue.
+  - name: Support
+    url: https://github.com/RichardGeorgeDavis/google-drive-icon-guard/blob/main/.github/SUPPORT.md
+    about: Start here for troubleshooting and tester support guidance.

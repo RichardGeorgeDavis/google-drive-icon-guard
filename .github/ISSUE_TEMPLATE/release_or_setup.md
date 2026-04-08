@@ -2,7 +2,7 @@
 name: Release or setup task
 about: Track a public beta, download, GitHub setup, or release-readiness task
 title: ""
-labels: ["release"]
+labels: []
 assignees: []
 ---
 

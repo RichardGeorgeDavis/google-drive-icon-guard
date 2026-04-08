@@ -345,15 +345,17 @@ The repo-side follow-up passes for the Cursor -> Codex review item are complete:
 - release artifact verification now passes end-to-end
 - ES subscriber runtime entrypoints and docs are aligned
 - protected helper boundary now accepts the future live runtime coordinator and surfaces runtime-start failure cleanly
-- latest validation rerun is green (`swift test`: 81 passing)
+- latest validation rerun is green (`swift test`: 87 passing)
 
 ## Key docs
 
-- [Original project handover](./google-drive-icon-guard-handover.md)
+- [Current state](./current-state.md)
+- [Roadmap](./roadmap.md)
+- [Architecture](./architecture.md)
+- [Help wanted](./help-wanted.md)
 - [Milestone 1 scope discovery notes](./milestone-1-scope-inventory.md)
 - [Public launch checklist](./public-launch-checklist.md)
 - [Protection status transitions](./protection-status-state-transitions.md)
-- [Codex handover 2026-04-07](./codex-handover-2026-04-07.md)
-- [Session handover 2026-04-08](./session-handover-2026-04-08.md)
 - [Next steps roadmap](./next-steps-roadmap.md)
 - [Endpoint Security Xcode integration](./endpoint-security-xcode-integration.md)
+- [Historical archive](./archive/README.md)

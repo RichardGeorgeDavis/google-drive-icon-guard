@@ -10,6 +10,8 @@ assignees: []
 
 Describe the feature or improvement.
 
+If your request is mainly about Apple Developer Program access, Endpoint Security entitlement help, signing sponsorship, or system-extension validation, use the **Apple platform help** template instead of this one.
+
 ## Why
 
 Why does this matter for the product or the public beta?

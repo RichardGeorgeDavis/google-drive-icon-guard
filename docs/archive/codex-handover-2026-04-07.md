@@ -76,7 +76,7 @@ That means the immediate next target is no longer app-side helper UX. The next t
 
 ## Xcode live client (repo additions)
 
-- Added [endpoint-security-xcode-integration.md](./endpoint-security-xcode-integration.md) with steps to link `EndpointSecurity.framework`, entitlements, and wire `handleLiveEndpointSecurityMessage`.
+- Added [endpoint-security-xcode-integration.md](../endpoint-security-xcode-integration.md) with steps to link `EndpointSecurity.framework`, entitlements, and wire `handleLiveEndpointSecurityMessage`.
 - Added `Installer/EndpointSecurity/entitlements.example.plist` and `Installer/EndpointSecurity/README.md`.
 
 ## Open technical risks
