@@ -47,6 +47,7 @@ Without that Apple Developer Program and entitlement lane, the project can conti
 - Apple platform sponsorship or entitlement help: [Help Wanted](./docs/help-wanted.md)
 - Xcode/system-extension architecture help: [Architecture](./docs/architecture.md)
 - packaged-build validation and tester feedback: [First-run guidance and troubleshooting](./docs/first-run-and-troubleshooting.md)
+- alternative approaches without Endpoint Security (and trade-offs): [Non-Endpoint-Security alternatives](./docs/non-endpoint-security-alternatives.md)
 - normal repo contributions: [Contributing](./.github/CONTRIBUTING.md)
 
 ## Preview

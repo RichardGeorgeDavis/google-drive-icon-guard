@@ -154,6 +154,10 @@ If the team cannot yet carry the Apple entitlement lane, the fallback option is:
 
 That path can support a useful "background cleanup" beta, but it does not satisfy the acceptance criteria above and should not be described as true blocking or process-aware prevention.
 
+For a broader survey of “creative” non-ES approaches (and why they are not equivalent), see:
+
+- [Non-Endpoint-Security alternatives](./non-endpoint-security-alternatives.md)
+
 ## References
 
 - In-repo state transition notes: [protection-status-state-transitions.md](./protection-status-state-transitions.md)
